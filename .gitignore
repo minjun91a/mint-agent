@@ -1,0 +1,19 @@
+# 이 repo는 순수 MINT 에이전트 정의(AGENTS.md / CLAUDE.md / README.md)만 추적합니다.
+# 프로젝트 코드·산출물·메모리가 실수로 섞여 들어가는 것을 방지합니다.
+
+# OS / 편집기 부산물
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# 프로젝트 산출물 (실수 방지용)
+*.pdf
+_pdf_scan.txt
+
+# Claude Code 로컬 설정/메모리 (에이전트 정의 아님)
+.claude/
