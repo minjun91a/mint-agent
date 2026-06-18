@@ -15,11 +15,12 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] 엔진/어댑터/Trust 전수 분류 → [inventory.md](inventory.md)
 - [x] 개발 블로그 시작 → [blog/](blog/)
 
-## ⏭️ Phase 1 — 엔진/어댑터 경계 분리
+## 🔄 Phase 1 — 엔진/어댑터 경계 분리 *(진행 중)*
 
-- [ ] **선결: 동작 동일성 테스트 하니스** (리팩터 전후 산출물 동일 보증)
-- [ ] `core/` · `adapters/youtube/` 골격 + `produce/review/publish` 인터페이스 정의
-- [ ] youtube 모듈 점진 이식 (엔진/어댑터 분해)
+- [x] **선결: 동작 동일성 테스트 하니스** — pytest 골격(`tests/`, `pyproject.toml`), 원본 대조 parity 검증
+- [x] 첫 조각: `review` 단계 — `core/trust/verify.py`(Verdict/Violation/Reviewer 포트) + `adapters/youtube/review.py`(compliance 동작 동일 이식, 특성화 테스트 10건 green)
+- [ ] `produce` · `publish` 포트 정의 + 다음 모듈 이식
+- [ ] 엔진 후보 이식 (memory·persona·control·orchestrator) + 모델 호출 게이트웨이
 - [ ] 3중 결합 분해 (Discord·YouTube·AXIS를 어댑터 뒤로)
 
 ## ⬜ Phase 2 — 신뢰 레이어 1차

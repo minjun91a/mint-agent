@@ -1,0 +1,10 @@
+[project]
+name = "mint-agent"
+version = "0.1.0"
+description = "플랫폼 독립 멀티 에이전트 자동화 엔진 + 신뢰(Trust) 레이어"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"
