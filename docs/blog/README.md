@@ -11,6 +11,7 @@ youtube-agent(운영 중인 1인 YouTube 자동화)와 신뢰 레이어(trust)�
 | 날짜 | 편 | 제목 | Phase |
 |---|---|---|---|
 | 2026-06-18 | 01 | [왜 youtube-agent와 trust-layer를 mint-agent로 합치나](posts/2026-06-18-01-왜-mint-agent로-합치는가.md) | Phase 0 |
+| 2026-06-18 | 02 | [운영 코드를 안 깨고 가르기 — 특성화 테스트 + parity](posts/2026-06-18-02-운영코드를-안깨고-가르기.md) | Phase 1 |
 
 ## 글 형식 (틀)
 
