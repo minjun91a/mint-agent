@@ -21,8 +21,9 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] `review` 단계 — `core/trust/verify.py`(Verdict/Violation/Reviewer 포트) + `adapters/youtube/review.py`(compliance 동작 동일 이식, 특성화 10건 + 원본 parity)
 - [x] `produce/review/publish` 계약 골격 — `core/pipeline.py`(PlatformAdapter Protocol)
 - [x] `produce` 단계 이식 — `captions`(자막 빌더, 특성화 18건) · `clip_extractor`(롱폼→숏폼, 특성화 9건), 각 원본 parity. 누적 테스트 37 green
+- [x] 엔진 첫 조각 — `core/memory.py`(`ChannelMemory`, DB 경로 주입으로 위치 결합 제거; 특성화 14건 + 원본 parity). 누적 테스트 51 green
 - [ ] `publish` 이식 (`uploader`, YouTube API라 목 필요) + produce 나머지 모듈
-- [ ] 엔진 후보 이식 (memory·persona·control·orchestrator) + 모델 호출 게이트웨이
+- [ ] 엔진 나머지 이식 (persona·control·orchestrator) + 모델 호출 게이트웨이
 - [ ] 3중 결합 분해 (Discord·YouTube·AXIS를 어댑터 뒤로)
 
 ## ⬜ Phase 2 — 신뢰 레이어 1차
