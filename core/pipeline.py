@@ -15,6 +15,7 @@ core.pipeline — 플랫폼 어댑터의 produce → review → publish 계약(�
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from core.trust.verify import Verdict
@@ -35,3 +36,22 @@ class PlatformAdapter(Protocol):
     def publish(self, asset: Any) -> Any:
         """자산 → 플랫폼 게시(업로드). (구현 예정)"""
         ...
+
+
+@dataclass(frozen=True)
+class GateDecision:
+    """발행 게이트 판정 — 엔진이 어댑터 review로부터 내린 진행/보류 결정."""
+
+    proceed: bool      # True면 publish 진행 가능
+    verdict: Verdict   # 근거가 된 검증 결과
+
+
+def gate(adapter: PlatformAdapter, content: Any, seo: Any) -> GateDecision:
+    """엔진 발행 게이트: 어댑터의 review 결과로 발행 여부를 정한다.
+
+    엔진은 어댑터 구체 타입(youtube/research/...)을 **모른다** — `PlatformAdapter` 포트로만 다룬다.
+    정책: `recommendation == "approve"`일 때만 진행. `"review"`(HITL 대기)·`"reject"`는 보류.
+    (Trust ② HITL 게이트를 엔진 레벨에서 표현 — 애매하면 멈추고 사람에게.)
+    """
+    verdict = adapter.review(content, seo)
+    return GateDecision(proceed=verdict.recommendation == "approve", verdict=verdict)
