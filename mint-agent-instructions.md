@@ -63,7 +63,6 @@
 - `AGENT_REGISTRY` — 에이전트 등록/관리 (Phase 2 정규화 완료) → **엔진**
 - Discord 기반 HITL 승인 워크플로우 → **엔진**
 - BOT/ALPHA 토큰 라우팅 → **엔진** (비용 라우터로 명시화 대상)
-- AXIS Inbox Sync 스케줄러 → **엔진**
 - `cleanup-execution-log.md` (24+ 환각 정리 로그) → **eval/trust의 데이터 소스**
 - `manhwa_seo.py` (Gemini 동적 영문 설명), `manhwa_review`, `alpha_review`, `policy` 핸들러 → **youtube 어댑터**
 - 업로드 파이프라인: `story_gem_scheduled.ps1`, `series_scheduled.ps1` (`--upload`) → **youtube 어댑터**

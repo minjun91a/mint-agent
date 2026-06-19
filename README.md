@@ -42,14 +42,13 @@ flowchart TB
   end
   YT["adapters/youtube<br/>produce · review · publish"]:::out
   RES["adapters/research<br/>(Phase 3)"]:::out
-  AXIS["AXIS<br/>external data"]:::out
 
-  DISCORD --> CORE --> TRUST --> YT & RES & AXIS
+  DISCORD --> CORE --> TRUST --> YT & RES
   classDef io fill:#1f2937,color:#fff;
   classDef out fill:#0e7490,color:#fff;
 ```
 
-> 결합면은 셋이다 — **Discord**(제어·승인·알림) · **YouTube**(콘텐츠 출구) · **AXIS**(외부 비즈니스 데이터).
+> 결합면은 둘이다 — **Discord**(제어·승인·알림) · **YouTube**(콘텐츠 출구).
 > 상세 분류는 [docs/inventory.md](docs/inventory.md).
 
 ## 신뢰 레이어 4기둥 (Trust Pillars)

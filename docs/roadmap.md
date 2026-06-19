@@ -24,7 +24,7 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] 엔진 첫 조각 — `core/memory.py`(`ChannelMemory`, DB 경로 주입으로 위치 결합 제거; 특성화 14건 + 원본 parity). 누적 테스트 51 green
 - [ ] `publish` 이식 (`uploader`, YouTube API라 목 필요) + produce 나머지 모듈
 - [ ] 엔진 나머지 이식 (persona·control·orchestrator) + 모델 호출 게이트웨이
-- [ ] 3중 결합 분해 (Discord·YouTube·AXIS를 어댑터 뒤로)
+- [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
 ## ⬜ Phase 2 — 신뢰 레이어 1차
 
