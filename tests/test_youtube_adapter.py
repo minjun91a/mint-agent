@@ -30,12 +30,34 @@ def test_review_delegates_and_returns_verdict():
     assert v.recommendation == "approve"
 
 
-def test_produce_and_publish_not_implemented_yet():
-    a = YouTubeAdapter()
+def test_produce_not_implemented_yet():
     with pytest.raises(NotImplementedError):
-        a.produce({})
+        YouTubeAdapter().produce({})
+
+
+def test_publish_requires_injected_publisher():
     with pytest.raises(NotImplementedError):
-        a.publish({})
+        YouTubeAdapter().publish({})
+
+
+def test_publish_delegates_to_injected_publisher(tmp_path):
+    from adapters.youtube.publish import YouTubePublisher
+
+    class _FakeBackend:
+        def insert_video(self, body, video_path):
+            return "vid9"
+
+        def set_thumbnail(self, video_id, thumbnail_path):
+            ...
+
+        def insert_caption(self, video_id, srt_path, language, name):
+            return True
+
+    a = YouTubeAdapter(publisher=YouTubePublisher(_FakeBackend()))
+    res = a.publish({"video_path": tmp_path / "v.mp4", "thumbnail_path": None,
+                     "title": "T", "description": "d"})
+    assert res["video_id"] == "vid9"
+    assert res["url"] == "https://youtu.be/vid9"
 
 
 # ── 엔진 발행 게이트가 포트를 통해 어댑터를 다룬다 ──
