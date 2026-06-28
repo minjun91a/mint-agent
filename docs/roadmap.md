@@ -24,7 +24,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] 엔진 첫 조각 — `core/memory.py`(`ChannelMemory`, DB 경로 주입으로 위치 결합 제거; 특성화 14건 + 원본 parity). 누적 테스트 51 green
 - [x] 통합 — `adapters/youtube/adapter.py`(`YouTubeAdapter` = `PlatformAdapter` 구현) + 엔진 발행 게이트 `core.pipeline.gate()`. **포트 분리 증명**: 엔진 게이트가 youtube 아닌 어댑터에도 동작(adapter-agnostic 테스트). 누적 58 green
 - [x] `publish` 이식 — `adapters/youtube/publish.py`(`build_video_body` 순수 + `YouTubePublisher` 백엔드 주입). **첫 mock 패턴**(fake 백엔드, 외부 의존 0). `YouTubeAdapter.publish` 연결. 누적 72 green
-- [ ] `produce` 파이프라인 이식 (story_writer/tts/image/video — LLM/외부라 목 필요)
+- [x] `produce` LLM 모듈 첫 이식 — `adapters/youtube/seo.py`(순수 로직 + LLM 생성기 주입, 특성화 14건 + 순수 helper·fallback parity). 누적 86 green
+- [ ] `produce` 나머지 (story_writer/tts/image/video — 같은 LLM-mock 리듬) + LLM 2개째부터 모델 게이트웨이 추출
 - [ ] 엔진 나머지 이식 (persona·control·orchestrator) + 모델 호출 게이트웨이
 - [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
