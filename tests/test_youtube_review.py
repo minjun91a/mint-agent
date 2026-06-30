@@ -4,9 +4,12 @@ adapters.youtube.review 특성화(golden-master) 테스트.
 
 목적: youtube-agent/agents/compliance.py에서 이식한 **룰 검사층의 동작을 고정**해,
 이후 리팩터가 동작을 바꾸지 않음을 보증한다(브리프 8장: 테스트로 동일성 보증).
-결정적 경로(deep=False / 룰)만 검증한다 — LLM(deep=True+키) 경로는 비결정이므로 제외.
+룰 경로(deep=False)는 결정적이라 그대로 고정한다. LLM 심층 경로는 과거엔 비결정이라 제외했으나,
+모델 게이트웨이 추출 이후 **가짜 게이트웨이 주입**으로 결정적으로 검증한다(룰+LLM 병합·오류 안전화).
 """
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -18,6 +21,22 @@ from adapters.youtube.review import (
     review,
 )
 from core.trust.verify import Reviewer, Verdict, Violation
+
+
+class _FakeGateway:
+    """주입용 가짜 LLM 게이트웨이 — canned 텍스트 / 예외 / 미가용을 흉내낸다."""
+
+    def __init__(self, *, text: str | None = None, raises: Exception | None = None,
+                 available: bool = True) -> None:
+        self._text = text
+        self._raises = raises
+        self.available = available
+
+    def complete(self, system: str, prompt: str, *, model: str,
+                 temperature: float = 0.4, json_mode: bool = True) -> str:
+        if self._raises is not None:
+            raise self._raises
+        return self._text or "{}"
 
 # AI 라벨 마커가 포함된 깨끗한 입력
 CLEAN_SCRIPT = {
@@ -117,3 +136,47 @@ def test_format_violations_md():
     seo = {"title": "t", "description": "no disclosure"}
     md = format_violations_md(review(CLEAN_SCRIPT, seo, deep=False))
     assert "🟠" in md and "ai_labeling" in md
+
+
+# ── LLM 심층 경로: 가짜 게이트웨이 주입 (게이트웨이 추출로 새로 결정화) ──
+
+def test_deep_merges_gateway_violations_after_rules():
+    gw = _FakeGateway(text=json.dumps({
+        "passed": True, "score": 0.1,
+        "violations": [{"category": "tos", "severity": "low", "detail": "minor"}],
+        "recommendation": "approve",
+    }))
+    v = review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw)
+    assert [x.category for x in v.violations] == ["tos"]   # 룰 위반 0 + LLM 1
+    assert v.recommendation == "approve"                   # LLM 권고 채택
+    assert v.score == pytest.approx(0.1)                   # LLM score 채택
+
+
+def test_deep_high_severity_fails_even_if_llm_says_passed():
+    seo = {"title": "t", "description": "no disclosure"}    # 룰: ai_labeling(med)
+    gw = _FakeGateway(text=json.dumps({
+        "passed": True, "score": 0.5,
+        "violations": [{"category": "deepfake", "severity": "high", "detail": "x"}],
+        "recommendation": "reject",
+    }))
+    v = review(CLEAN_SCRIPT, seo, deep=True, gateway=gw)
+    assert [x.category for x in v.violations] == ["ai_labeling", "deepfake"]  # 룰 먼저, LLM 뒤
+    assert v.passed is False              # high 포함 → LLM passed=True여도 False로 게이트
+    assert v.has_high_severity is True
+    assert v.recommendation == "reject"
+
+
+def test_deep_gateway_error_forces_review():
+    gw = _FakeGateway(raises=RuntimeError("api down"))
+    v = review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw)
+    assert v.recommendation == "review"   # LLM 오류 → 안전하게 사람 판단으로
+    assert v.violations == []             # 룰 위반 0 그대로
+    assert v.passed is True
+
+
+def test_deep_unavailable_gateway_keeps_rule_recommendation():
+    # 미가용(키 없음)은 오류와 다르다 — complete를 부르지 않고 룰의 자연 권고를 그대로 둔다.
+    gw = _FakeGateway(available=False, raises=AssertionError("complete 호출 금지"))
+    v = review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw)
+    assert v.recommendation == "approve"  # 룰 결과의 자연 권고 (강제 'review' 아님)
+    assert v.violations == []

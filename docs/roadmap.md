@@ -25,14 +25,15 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] 통합 — `adapters/youtube/adapter.py`(`YouTubeAdapter` = `PlatformAdapter` 구현) + 엔진 발행 게이트 `core.pipeline.gate()`. **포트 분리 증명**: 엔진 게이트가 youtube 아닌 어댑터에도 동작(adapter-agnostic 테스트). 누적 58 green
 - [x] `publish` 이식 — `adapters/youtube/publish.py`(`build_video_body` 순수 + `YouTubePublisher` 백엔드 주입). **첫 mock 패턴**(fake 백엔드, 외부 의존 0). `YouTubeAdapter.publish` 연결. 누적 72 green
 - [x] `produce` LLM 모듈 첫 이식 — `adapters/youtube/seo.py`(순수 로직 + LLM 생성기 주입, 특성화 14건 + 순수 helper·fallback parity). 누적 86 green
-- [ ] `produce` 나머지 (story_writer/tts/image/video — 같은 LLM-mock 리듬) + LLM 2개째부터 모델 게이트웨이 추출
-- [ ] 엔진 나머지 이식 (persona·control·orchestrator) + 모델 호출 게이트웨이
+- [x] **모델 게이트웨이 추출** — `core/llm.py`(`LLMGateway` 포트 + `GeminiGateway`). seo·review가 각자 반복하던 genai 호출(지연 import→configure→GenerativeModel→generate_content)을 **단일 seam**으로 통합. 부수효과: review의 LLM 심층 경로가 게이트웨이 주입으로 **결정적 테스트 가능**해짐(룰+LLM 병합·오류 안전화 4건 + 게이트웨이 특성화 8건). **Phase 2 비용 라우팅·관측의 연결점.** 누적 98 green
+- [ ] `produce` 나머지 (story_writer/tts/image/video — 같은 LLM-mock 리듬)
+- [ ] 엔진 나머지 이식 (persona·control·orchestrator)
 - [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
 ## ⬜ Phase 2 — 신뢰 레이어 1차
 
 - [ ] eval 하니스 (`compliance_audit_*.jsonl` → 자동 환각/위반 체크)
-- [ ] 모델 호출 게이트웨이 + **복잡도 기반 비용 라우터**(Opus/Sonnet/Haiku) 명시화
+- [ ] `core.llm` 게이트웨이 위에 **복잡도 기반 비용 라우터**(Opus/Sonnet/Haiku) + 관측성 래퍼 (seam은 Phase 1에서 확보)
 - [ ] 관측성 로깅 → README 지표 테이블 실측값 채우기
 - [ ] 발행 전 가드레일 정비
 

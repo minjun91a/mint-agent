@@ -2,7 +2,7 @@
 """
 adapters.youtube.seo 테스트.
 
-LLM(Gemini)이 끼므로 원본 parity 불가 → 순수 로직 특성화 + 가짜 생성기 주입(mock 패턴).
+LLM(Gemini)이 끼므로 원본 parity 불가 → 순수 로직 특성화 + 가짜 게이트웨이 주입(mock 패턴).
 """
 from __future__ import annotations
 
@@ -29,11 +29,20 @@ SCRIPT = {
 }
 
 
-def _fake_gen(payload: dict):
-    """주입용 가짜 생성기 — canned JSON 반환."""
-    def gen(system: str, user_msg: str, model: str) -> str:
-        return json.dumps(payload)
-    return gen
+class _FakeGateway:
+    """주입용 가짜 LLM 게이트웨이 — canned 텍스트 반환 또는 예외 발생 (mock 패턴)."""
+
+    available = True
+
+    def __init__(self, *, text: str | None = None, raises: Exception | None = None) -> None:
+        self._text = text
+        self._raises = raises
+
+    def complete(self, system: str, prompt: str, *, model: str,
+                 temperature: float = 0.4, json_mode: bool = True) -> str:
+        if self._raises is not None:
+            raise self._raises
+        return self._text or "{}"
 
 
 # ── 순수 로직 ──
@@ -80,34 +89,32 @@ def test_build_fallback_structure():
     assert len(fb["tags"]) <= 15
 
 
-# ── LLM 경계: 가짜 생성기 주입 ──
+# ── LLM 경계: 가짜 게이트웨이 주입 ──
 
 def test_generate_normalizes_injected_response():
     payload = {"title": "X" * 120, "description": "d",
                "tags": ["Aaa", "aaa", "bbb"], "hashtags": ["shorts", "aiwebtoon"]}
-    meta = generate_seo_meta(SCRIPT, generate=_fake_gen(payload))
+    meta = generate_seo_meta(SCRIPT, gateway=_FakeGateway(text=json.dumps(payload)))
     assert len(meta["title"]) == 95                     # 120 → 95 절단
     assert meta["hashtags"] == ["#shorts", "#aiwebtoon"]  # # 접두
     assert meta["category_id"] == "1"
     assert all(t == t.lower() for t in meta["tags"])
 
 
-def test_generate_falls_back_on_generator_error():
-    def boom(system, user_msg, model):
-        raise RuntimeError("api down")
-    meta = generate_seo_meta(SCRIPT, generate=boom)
+def test_generate_falls_back_on_gateway_error():
+    meta = generate_seo_meta(SCRIPT, gateway=_FakeGateway(raises=RuntimeError("api down")))
     assert meta["title"] == "The Murim Genius"
     assert "🤖 Created with generative AI." in meta["description"]
 
 
 def test_generate_falls_back_on_invalid_json():
-    meta = generate_seo_meta(SCRIPT, generate=lambda s, u, m: "not json {")
+    meta = generate_seo_meta(SCRIPT, gateway=_FakeGateway(text="not json {"))
     assert meta["title"] == "The Murim Genius"
     assert meta["category_id"] == "1"
 
 
-def test_generate_falls_back_without_key_or_generator(monkeypatch):
+def test_generate_falls_back_when_gateway_unavailable(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    meta = generate_seo_meta(SCRIPT)   # 주입 없음 + 키 없음 → fallback
+    meta = generate_seo_meta(SCRIPT)   # 주입 없음 + 키 없음 → 게이트웨이 미가용 → fallback
     assert meta["title"] == "The Murim Genius"
     assert len(meta["tags"]) <= 15

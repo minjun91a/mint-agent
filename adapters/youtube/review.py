@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from typing import Any
 
+from core.llm import GeminiGateway, LLMGateway
 from core.trust.verify import Verdict, Violation
 
 log = logging.getLogger("mint.adapters.youtube.review")
@@ -137,23 +137,18 @@ def _rule_only_verdict(violations: list[Violation]) -> Verdict:
 
 def _llm_deep_check(script: dict[str, Any], seo: dict[str, Any],
                     rule_violations: list[Violation],
-                    model: str = _DEFAULT_MODEL) -> Verdict:
-    """Gemini 심층 분석. 키 없으면 룰 결과, 실패 시 룰 결과(단 recommendation='review')."""
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not api_key:
+                    *, model: str = _DEFAULT_MODEL,
+                    gateway: LLMGateway | None = None) -> Verdict:
+    """게이트웨이 심층 분석. 미가용(키 없음)이면 룰 결과, 호출 실패 시 룰 결과(단 recommendation='review').
+
+    LLM 미가용과 LLM 오류를 구분한다: 전자는 자연스러운 룰 권고를 그대로 두고, 후자는 안전하게
+    'review'(사람이 판단)로 강제한다. (원본 동작 보존)
+    """
+    gw = gateway if gateway is not None else GeminiGateway()
+    if not gw.available:
         return _rule_only_verdict(rule_violations)
 
     try:
-        import google.generativeai as genai  # 선택 의존성: 지연 import
-        genai.configure(api_key=api_key)
-        m = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=_LLM_SYSTEM,
-            generation_config={
-                "temperature": 0.2,
-                "response_mime_type": "application/json",
-            },
-        )
         prompt = json.dumps({
             "SCRIPT": {k: script.get(k, "") for k in
                        ("title", "hook", "body", "cliffhanger", "category", "_used_tropes")},
@@ -161,8 +156,8 @@ def _llm_deep_check(script: dict[str, Any], seo: dict[str, Any],
                          ("title", "description", "tags", "hashtags", "category_id")},
             "RULE_VIOLATIONS": [v.to_dict() for v in rule_violations],
         }, ensure_ascii=False, indent=2, default=str)
-        resp = m.generate_content(prompt)
-        data = json.loads((resp.text or "{}").strip())
+        raw = gw.complete(_LLM_SYSTEM, prompt, model=model, temperature=0.2)
+        data = json.loads(raw)
     except Exception as exc:
         log.exception(f"compliance LLM 실패 — 룰 결과만 사용: {exc}")
         # 원본 동작: LLM 실패 시 recommendation은 항상 'review'로 안전화
@@ -194,32 +189,37 @@ def _llm_deep_check(script: dict[str, Any], seo: dict[str, Any],
 # ── 진입점 ────────────────────────────────────────────────────────────────
 
 def review(script: dict[str, Any], seo: dict[str, Any], *,
-           deep: bool = True, model: str = _DEFAULT_MODEL) -> Verdict:
+           deep: bool = True, model: str = _DEFAULT_MODEL,
+           gateway: LLMGateway | None = None) -> Verdict:
     """script + SEO 메타 → 검증 Verdict.
 
-    deep=True (기본): 룰 + Gemini 심층. deep=False: 룰만(오프라인·비용 절감, 완전 결정적).
+    deep=True (기본): 룰 + 게이트웨이 LLM 심층. deep=False: 룰만(오프라인·비용 절감, 완전 결정적).
+    gateway: LLM 게이트웨이 주입(테스트용 fake). 미지정 시 실 `GeminiGateway`.
     """
     rule_v = _quick_rule_check(script, seo)
     if not deep:
         return _rule_only_verdict(rule_v)
-    return _llm_deep_check(script, seo, rule_v, model=model)
+    return _llm_deep_check(script, seo, rule_v, model=model, gateway=gateway)
 
 
 def check(script: dict[str, Any], seo: dict[str, Any], *,
-          deep: bool = True, model: str = _DEFAULT_MODEL) -> dict[str, Any]:
+          deep: bool = True, model: str = _DEFAULT_MODEL,
+          gateway: LLMGateway | None = None) -> dict[str, Any]:
     """레거시 호환 진입점 — 원본 `compliance.check`와 동일한 dict 반환."""
-    return review(script, seo, deep=deep, model=model).to_dict()
+    return review(script, seo, deep=deep, model=model, gateway=gateway).to_dict()
 
 
 class ComplianceReviewer:
     """`core.trust.Reviewer` 구현 — YouTube 발행 전 게이트."""
 
-    def __init__(self, *, deep: bool = True, model: str = _DEFAULT_MODEL) -> None:
+    def __init__(self, *, deep: bool = True, model: str = _DEFAULT_MODEL,
+                 gateway: LLMGateway | None = None) -> None:
         self.deep = deep
         self.model = model
+        self.gateway = gateway
 
     def review(self, script: dict[str, Any], seo: dict[str, Any]) -> Verdict:
-        return review(script, seo, deep=self.deep, model=self.model)
+        return review(script, seo, deep=self.deep, model=self.model, gateway=self.gateway)
 
 
 def format_violations_md(result: Verdict | dict[str, Any]) -> str:

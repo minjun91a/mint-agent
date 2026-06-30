@@ -8,20 +8,19 @@ adapters.youtube.seo — 영문 제목·설명·태그·해시태그 생성 (pro
   1. **순수 로직** — 카테고리 매핑(`_resolve_category_id`)·태그 정규화(`_ensure_15_tags`)·
      프롬프트 구성(`_build_user_msg`)·fallback(`_build_fallback`)·응답 정규화(`_normalize`).
      전부 결정적 → 특성화 테스트 + 원본 parity(순수 함수에 한해).
-  2. **LLM 경계** — `generate_seo_meta(..., generate=...)`로 생성기를 **주입**. 테스트는 가짜
-     생성기(canned JSON)를 넣어 정규화/fallback을 검증(mock 패턴). 실 Gemini는 지연 import.
+  2. **LLM 경계** — `generate_seo_meta(..., gateway=...)`로 `core.llm.LLMGateway`를 **주입**.
+     테스트는 가짜 게이트웨이(canned JSON)를 넣어 정규화/fallback을 검증(mock 패턴). 실 Gemini
+     호출은 엔진의 `GeminiGateway` 한 곳에 격리된다(모델 호출 seam).
 """
 from __future__ import annotations
 
 import json
 import logging
-import os
-from typing import Any, Callable
+from typing import Any
+
+from core.llm import GeminiGateway, LLMGateway
 
 log = logging.getLogger("mint.adapters.youtube.seo")
-
-# (system, user_msg, model) -> raw JSON text
-Generator = Callable[[str, str, str], str]
 
 # YouTube category mapping — fantasy 쇼츠는 1(Film & Animation) 또는 24(Entertainment)
 CATEGORY_MAP = {
@@ -169,38 +168,28 @@ def _normalize(data: dict[str, Any], script: dict[str, Any], category: str,
     }
 
 
-def _gemini_generate(system: str, user_msg: str, model: str) -> str:
-    """실 Gemini 호출 — googleapiclient/genai 지연 import."""
-    import google.generativeai as genai
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
-    m = genai.GenerativeModel(
-        model_name=model,
-        system_instruction=system,
-        generation_config={"temperature": 0.6, "response_mime_type": "application/json"},
-    )
-    resp = m.generate_content(user_msg)
-    return (resp.text or "{}").strip()
-
-
 def generate_seo_meta(script: dict[str, Any],
                       planner_trends: list[dict] | None = None,
                       *, model: str = "gemini-2.5-flash",
-                      generate: Generator | None = None) -> dict[str, Any]:
+                      gateway: LLMGateway | None = None) -> dict[str, Any]:
     """script + 선택적 트렌드 → SEO 메타데이터 dict.
 
-    generate: LLM 생성기 주입(테스트용 fake). 미지정 시 실 Gemini. 키 없음/실패 시 fallback.
+    gateway: LLM 게이트웨이 주입(테스트용 fake). 미지정 시 실 `GeminiGateway`.
+    게이트웨이가 미가용(키 없음)이거나 호출 실패 시 보수적 fallback. (원본 동작 보존)
     """
     category = script.get("category", "") or ""
     fallback = _build_fallback(script, category)
 
-    # 주입 없고 키도 없으면 바로 fallback (원본 동작)
-    if generate is None and not os.getenv("GEMINI_API_KEY", ""):
-        log.warning("GEMINI_API_KEY 미설정 — SEO fallback 사용")
+    gw = gateway if gateway is not None else GeminiGateway()
+
+    # 게이트웨이가 호출 불가(키 없음)면 바로 fallback (원본 동작)
+    if not gw.available:
+        log.warning("LLM 게이트웨이 미가용 — SEO fallback 사용")
         return fallback
 
-    gen = generate if generate is not None else _gemini_generate
     try:
-        raw = gen(_SEO_SYSTEM, _build_user_msg(script, planner_trends), model)
+        raw = gw.complete(_SEO_SYSTEM, _build_user_msg(script, planner_trends),
+                          model=model, temperature=0.6)
         data = json.loads(raw)
     except Exception as exc:
         log.exception(f"SEO 생성 실패 — fallback 사용 ({exc})")
