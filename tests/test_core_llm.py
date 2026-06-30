@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 import types
 
-from core.llm import GeminiGateway, LLMGateway
+from core.llm import GeminiGateway, LLMGateway, OpenAIGateway
 
 
 def _install_fake_genai(monkeypatch, *, text: str | None):
@@ -102,3 +102,76 @@ def test_complete_uses_env_key_when_not_explicit(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "env-key")
     GeminiGateway().complete("S", "P", model="m")
     assert calls["api_key"] == "env-key"
+
+
+# ── OpenAIGateway: 프로바이더 #2 — 같은 포트, 다른 SDK 매핑 ──
+
+def _install_fake_openai(monkeypatch, *, content: str | None):
+    """가짜 `openai`를 sys.modules에 심고, chat.completions.create 인자를 기록한다."""
+    calls: dict = {}
+
+    class _Msg:
+        def __init__(self, c):
+            self.content = c
+
+    class _Choice:
+        def __init__(self, c):
+            self.message = _Msg(c)
+
+    class _Resp:
+        def __init__(self, c):
+            self.choices = [_Choice(c)]
+
+    class _Completions:
+        def create(self, **kwargs):
+            calls.update(kwargs)
+            return _Resp(content)
+
+    class _Chat:
+        def __init__(self):
+            self.completions = _Completions()
+
+    class OpenAI:
+        def __init__(self, *, api_key=None):
+            calls["api_key"] = api_key
+            self.chat = _Chat()
+
+    fake = types.ModuleType("openai")
+    fake.OpenAI = OpenAI
+    monkeypatch.setitem(sys.modules, "openai", fake)
+    return calls
+
+
+def test_openai_available_reads_env(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert OpenAIGateway().available is False
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    assert OpenAIGateway().available is True
+    assert isinstance(OpenAIGateway(), LLMGateway)
+
+
+def test_openai_complete_maps_port_to_chat_messages(monkeypatch):
+    calls = _install_fake_openai(monkeypatch, content='  {"y": 2}\n')
+    out = OpenAIGateway(api_key="kkk").complete(
+        "SYS", "PROMPT", model="gpt-x", temperature=0.9)
+    assert out == '{"y": 2}'                       # strip
+    assert calls["api_key"] == "kkk"
+    assert calls["model"] == "gpt-x"
+    assert calls["temperature"] == 0.9
+    assert calls["messages"] == [
+        {"role": "system", "content": "SYS"},
+        {"role": "user", "content": "PROMPT"},
+    ]
+    assert calls["response_format"] == {"type": "json_object"}
+
+
+def test_openai_complete_json_mode_false_omits_response_format(monkeypatch):
+    calls = _install_fake_openai(monkeypatch, content="plain")
+    out = OpenAIGateway(api_key="k").complete("S", "P", model="m", json_mode=False)
+    assert out == "plain"
+    assert "response_format" not in calls
+
+
+def test_openai_complete_empty_falls_back_to_empty_object(monkeypatch):
+    _install_fake_openai(monkeypatch, content=None)
+    assert OpenAIGateway(api_key="k").complete("S", "P", model="m") == "{}"

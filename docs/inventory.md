@@ -147,7 +147,7 @@ Discord 없이 단발 실행. 엔진/어댑터 호출의 얇은 진입점(라우
 1. **2중 결합 분해** — Discord(IO)·YouTube(출력)를 각각 어댑터로 빼고, `core/`는 인터페이스만 의존.
 2. **모델 호출 추상화** — Gemini/OpenAI/Claude 직접호출이 모듈마다 산재 → `core/` 단일 모델 게이트웨이로 모으면
    비용라우팅(③)·관측성(④)이 자동으로 한 곳에 모인다.
-   → **착수 실현: `core/llm.py`**(`LLMGateway` 포트 + `GeminiGateway`). seo·review 2개 Gemini 호출부를 통합. OpenAI/Claude 백엔드와 비용·관측 래퍼는 Phase 2에서 같은 seam에 추가.
+   → **실현: `core/llm.py`**(`LLMGateway` 포트 + `GeminiGateway` + `OpenAIGateway`). seo·review(Gemini)·story_writer(OpenAI) 호출부를 통합 — 같은 `complete` 포트가 두 프로바이더에 동일 매핑되어 **프로바이더 교체 시 엔진/어댑터 불변**. Claude 백엔드·비용 라우팅·관측 래퍼는 Phase 2에서 같은 seam에 추가.
 3. **파이프라인 인터페이스(`produce/review/publish`)** — `tools/*_pipeline.py`에서 youtube 의존을 인터페이스 뒤로.
 4. **동작 동일성 보증** — 리팩터 전후 산출물 동일성 테스트(브리프 8장). 현재 자동 테스트 부재 → Phase 1 선결과제.
 
