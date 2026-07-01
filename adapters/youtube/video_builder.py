@@ -16,11 +16,16 @@ adapters.youtube.video_builder — 음성 + 이미지 슬라이드(+자막) → 
 from __future__ import annotations
 
 import logging
-import re
-import subprocess
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+
+# 공유 ffmpeg 실행 seam(러너·길이 파싱·경로). RunResult/parse_duration은 재노출(하위 호환).
+from adapters.youtube._ffmpeg import (
+    CommandRunner,
+    RunResult,
+    default_ffmpeg as _default_ffmpeg,
+    default_run as _default_run,
+    parse_duration,
+)
 
 log = logging.getLogger("mint.adapters.youtube.video_builder")
 
@@ -40,28 +45,7 @@ _DEFAULT_SRT_STYLE = (
 )
 
 
-@dataclass(frozen=True)
-class RunResult:
-    """명령 실행 결과 — 러너 주입 계약(반환 최소형)."""
-
-    returncode: int
-    stderr: str = ""
-
-
-# run(cmd, *, cwd=None) -> RunResult
-CommandRunner = Callable[..., RunResult]
-
-
 # ── 순수 로직 ──────────────────────────────────────────────────────────────
-
-def parse_duration(stderr: str) -> float:
-    """ffmpeg `-i` stderr에서 Duration(hh:mm:ss.ss)을 초로. 미검출 시 0.0. 원본과 동일."""
-    m = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", stderr)
-    if not m:
-        return 0.0
-    h, mn, s = int(m.group(1)), int(m.group(2)), float(m.group(3))
-    return h * 3600 + mn * 60 + s
-
 
 def zoom_frames(per_image: float) -> int:
     """켄번스 zoompan 프레임 수(30fps 기준, 최소 30). 원본과 동일."""
@@ -120,21 +104,6 @@ def build_mux_cmd(ffmpeg: str, video_in: str | Path, audio_in: str | Path,
         "-shortest",
         str(out),
     ]
-
-
-# ── 실행 경계 ──────────────────────────────────────────────────────────────
-
-def _default_ffmpeg() -> str:
-    """imageio_ffmpeg 지연 해석 — 모듈 import 시점에 선택 의존성을 끌어오지 않기 위함."""
-    import imageio_ffmpeg
-
-    return imageio_ffmpeg.get_ffmpeg_exe()
-
-
-def _default_run(cmd: list[str], *, cwd: str | None = None) -> RunResult:
-    """실 subprocess 실행 — stderr 캡처(원본과 동일 옵션)."""
-    r = subprocess.run(cmd, capture_output=True, text=True, errors="replace", cwd=cwd)
-    return RunResult(returncode=r.returncode, stderr=r.stderr or "")
 
 
 # ── 오케스트레이션 ─────────────────────────────────────────────────────────
