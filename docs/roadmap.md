@@ -31,7 +31,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] `produce` 자산화 — `adapters/youtube/video_builder.py`(음성+이미지+자막→쇼츠 mp4). **바이너리도 순수/IO 분리**: ffmpeg 인자 리스트를 순수 커맨드 빌더로 뽑고 실행은 `run` 주입 → 실 ffmpeg 없이 클립→concat→자막→mux 명령 시퀀스·실패·자막 cwd를 결정적 검증. 원본 SRT 스타일·ffmpeg 리터럴 parity(IDENTICAL). 특성화 16건. 누적 159 green
 - [x] `produce` 자산화 — `adapters/youtube/thumbnail_gen.py`(배경 이미지 + Pillow 텍스트 오버레이, A/B 변형). 배경 생성기(`gen_bg`) 주입으로 실 이미지 API 없이 렌더·AB 분기·임시파일 정리 검증. `_VARIANT_STYLES`·`FONT_CANDIDATES` 원본 parity(IDENTICAL). 특성화 6건. 누적 165 green
 - [x] `produce` 자산화 완결 — `adapters/youtube/tts_engine.py`(음성 합성). **세 주입 패턴 총동원**: 순수 `split_by_speaker` + `VoiceLibrary`(경로·rng 주입, 보이스 회전) + `SynthBackend`(ElevenLabs/OpenAI 주입·폴백) + 멀티보이스 ffmpeg(러너 주입). ffmpeg 2번째 사용 → 공유 seam **`_ffmpeg.py` 추출**(러너·길이 파싱; video_builder도 그 위로 재배선). `split_by_speaker` 원본 parity(IDENTICAL). 특성화 18건. 누적 183 green. **→ produce 전 단계(스크립트→음성→이미지→영상→썸네일) 모노레포 이식 완료**
-- [ ] 엔진 나머지 이식 (persona·control·orchestrator)
+- [x] 엔진 이식 — `control` 라우터: **inventory의 "경계 혼재" 해소**. 라우팅 메커니즘을 `core/control.py`(`IntentRouter` = 룰 + 게이트웨이 LLM 폴백, 플랫폼 무관)로, youtube intent 어휘·정규식 룰·arg 추출은 `adapters/youtube/control.py`로 분리. 룰 경로 원본 parity(IDENTICAL x15), 게이트웨이 재사용. 특성화 24건. 누적 207 green. (`dispatch`=액션 배선은 미이식 pipeline 의존 → orchestration 슬라이스로 미룸)
+- [ ] 엔진 나머지 이식 (persona·orchestrator) + control `dispatch`(핸들러 주입)
 - [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
 ## ⬜ Phase 2 — 신뢰 레이어 1차
