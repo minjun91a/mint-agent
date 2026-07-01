@@ -28,7 +28,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] **모델 게이트웨이 추출** — `core/llm.py`(`LLMGateway` 포트 + `GeminiGateway`). seo·review가 각자 반복하던 genai 호출(지연 import→configure→GenerativeModel→generate_content)을 **단일 seam**으로 통합. 부수효과: review의 LLM 심층 경로가 게이트웨이 주입으로 **결정적 테스트 가능**해짐(룰+LLM 병합·오류 안전화 4건 + 게이트웨이 특성화 8건). **Phase 2 비용 라우팅·관측의 연결점.** 누적 98 green
 - [x] `produce` 스크립트 모듈 — `adapters/youtube/story_writer.py`(트로프→1분 영문 스크립트). **`OpenAIGateway` 추가(프로바이더 #2)** = 게이트웨이 포트 payoff 증명(같은 `complete` 포트가 Gemini·OpenAI에 동일 매핑, 엔진/어댑터 불변). 순수 `format_tropes` + `TropeLibrary`(경로·clock·rng 주입으로 결정적) + 게이트웨이 주입. 원본 parity(SYSTEM_PROMPT 3314자·포맷 IDENTICAL). 누적 114 green
 - [x] `produce` 자산화 첫 모듈 — `adapters/youtube/image_gen.py`(FLUX→DALL-E 폴백·검열 3단 재시도). **`ImageBackend` 포트 + 백엔드 주입**(run/download/image_url을 주입해 폴백·검열 재시도를 결정적 테스트). 순수 `sanitize_prompt`/`enrich_prompt`/`dalle_attempt_prompts` 원본 parity(IDENTICAL). 특성화 29건. 누적 143 green
-- [ ] `produce` 자산화 나머지 (tts/video/thumbnail — 백엔드/러너 주입 패턴, ffmpeg는 순수 커맨드 빌더 분리)
+- [x] `produce` 자산화 — `adapters/youtube/video_builder.py`(음성+이미지+자막→쇼츠 mp4). **바이너리도 순수/IO 분리**: ffmpeg 인자 리스트를 순수 커맨드 빌더로 뽑고 실행은 `run` 주입 → 실 ffmpeg 없이 클립→concat→자막→mux 명령 시퀀스·실패·자막 cwd를 결정적 검증. 원본 SRT 스타일·ffmpeg 리터럴 parity(IDENTICAL). 특성화 16건. 누적 159 green
+- [ ] `produce` 자산화 나머지 (tts·thumbnail — tts=화자분할·보이스회전(순수)+다중 프로바이더 주입 / thumbnail=Pillow 오버레이)
 - [ ] 엔진 나머지 이식 (persona·control·orchestrator)
 - [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
