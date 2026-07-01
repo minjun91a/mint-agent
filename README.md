@@ -8,13 +8,13 @@
 <sub>A platform-agnostic multi-agent automation engine + trust layer, carved out of a YouTube
 pipeline running in production since April 2026. *The platform is an adapter; the engine is the asset.*</sub>
 
-[![CI](https://github.com/minjun91a/MINT/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/MINT/actions/workflows/ci.yml)
+[![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
 ![tests](https://img.shields.io/badge/tests-143_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
-![last commit](https://img.shields.io/github/last-commit/minjun91a/MINT)
+![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
 
 [아키텍처](#-아키텍처) · [빠른 시작](#-빠른-시작) · [개발 블로그](docs/blog/) · [로드맵](docs/roadmap.md) · [ADR](docs/adr/)
 
@@ -42,44 +42,39 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
 - **🧪 특성화 테스트 + 원본 parity — ✅ 143 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🧭 복잡도 기반 비용 라우터 — 🔜 Phase 2** · 게이트웨이 seam 위에 Opus/Sonnet/Haiku 라우팅.
-- **📊 멀티모델 컨센서스 검증 · 관측성 로깅 — 🔜 Phase 2**
+- **📊 멀티모델 컨센서스 검증 · 관측성 로깅 — 🔜 Phase 2** · 응답을 여러 모델로 교차 검증해
+  환각을 잡고 교정·기록하는 것이 목표. 검증 규칙은 매일의 코드 검증 훈련([daily-drill](https://github.com/minjun91a/daily-drill))에서
+  반복 발견한 *"그럴듯하지만 틀린"* 패턴을 코드화해 채운다 — 현재 3일차(SQL·pandas·Python), 규칙 후보 축적 중.
 - **💬 Discord HITL 어댑터 — 🔜 Phase 1 후반** · 레거시에서 작동 중, 모노레포 이관 예정.
 
 ## 🏗 아키텍처
 
 ```mermaid
 flowchart LR
-    REQ[콘텐츠 브리프] --> ADP
-
-    subgraph ADAPTERS["adapters · 교체 가능"]
-        ADP[YouTube 어댑터<br/>produce]
-        PUB[publish]
-    end
-    subgraph CORE["core · 플랫폼 무관 엔진"]
-        GATE{"Trust 게이트<br/>pipeline.gate()"}
-        GW[모델 게이트웨이<br/>Gemini · OpenAI]
-        ROUTER[비용 라우터<br/>Opus·Sonnet·Haiku<br/>🔜 Phase 2]
-    end
-
-    ADP -->|review| GATE
-    GATE -->|approve| PUB
-    GATE -->|review · reject| HITL[HITL 보류<br/>사람 판단]
-    ADP -. LLM 호출 .-> GW
-    GW -. 🔜 .-> ROUTER
-
-    classDef planned stroke-dasharray:5 5,fill:#eeeeee,color:#666;
-    class ROUTER planned;
+    A[요청 유형] --> B{복잡도 분석}
+    B -->|고난도| C1[Opus]
+    B -->|중간| C2[Sonnet]
+    B -->|단순| C3[Haiku]
+    C1 & C2 & C3 --> D[Trust Layer]
+    D --> E{컨센서스 검증}
+    E -->|불일치·판정| F[교정 + 로그 기록]
+    F --> D
+    E -->|통과| G{HITL 승인 필요?}
+    G -->|예| H[사람 승인 / Discord]
+    G -->|아니오| I[응답 반환]
+    H --> I
 ```
 
-> 핵심: **엔진은 어댑터 구체 타입을 모른다.** `gate()`는 `PlatformAdapter` 포트만 받으므로,
-> youtube가 아닌 어떤 어댑터든 끼울 수 있다. 결합면 상세 분류는 [docs/inventory.md](docs/inventory.md).
+> **목표 아키텍처(비전).** 복잡도 기반 라우팅(Opus/Sonnet/Haiku)·컨센서스 검증·HITL은
+> Phase 1 후반~Phase 2에서 구현한다 — 현재 구현 상태는 위 **핵심 기능**(✅/🔜)·아래 **로드맵** 참조.
+> 지금 작동하는 엔진/어댑터 포트 구조는 [최소 예제](#-빠른-시작)로 바로 확인할 수 있다.
 
 ## 🚀 빠른 시작
 
 ```bash
 # 1. 클론
-git clone https://github.com/minjun91a/MINT.git
-cd MINT
+git clone https://github.com/minjun91a/mint-agent.git
+cd mint-agent
 
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
