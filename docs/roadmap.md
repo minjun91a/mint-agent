@@ -33,7 +33,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] `produce` 자산화 완결 — `adapters/youtube/tts_engine.py`(음성 합성). **세 주입 패턴 총동원**: 순수 `split_by_speaker` + `VoiceLibrary`(경로·rng 주입, 보이스 회전) + `SynthBackend`(ElevenLabs/OpenAI 주입·폴백) + 멀티보이스 ffmpeg(러너 주입). ffmpeg 2번째 사용 → 공유 seam **`_ffmpeg.py` 추출**(러너·길이 파싱; video_builder도 그 위로 재배선). `split_by_speaker` 원본 parity(IDENTICAL). 특성화 18건. 누적 183 green. **→ produce 전 단계(스크립트→음성→이미지→영상→썸네일) 모노레포 이식 완료**
 - [x] 엔진 이식 — `control` 라우터: **inventory의 "경계 혼재" 해소**. 라우팅 메커니즘을 `core/control.py`(`IntentRouter` = 룰 + 게이트웨이 LLM 폴백, 플랫폼 무관)로, youtube intent 어휘·정규식 룰·arg 추출은 `adapters/youtube/control.py`로 분리. 룰 경로 원본 parity(IDENTICAL x15), 게이트웨이 재사용. 특성화 24건. 누적 207 green. (`dispatch`=액션 배선은 미이식 pipeline 의존 → orchestration 슬라이스로 미룸)
 - [x] 엔진 이식 — `persona`: control과 같은 분리(엔진 `core/persona` = `Persona`·`PersonaRegistry`·`ask`[메모리·게이트웨이·agent_runner 주입] / 어댑터 `adapters/youtube/persona` = 페르소나 정의·Discord 채널 매핑). memory=`core/memory` 재사용, Gemini=게이트웨이(`json_mode=False`), claude=`agent_runner` seam(미이식 claude_runner 대체). **AXIS 언급 제거**(범위 제외 결정). 구조 parity(키·env맵·기본값 동일, AXIS 2→0). 특성화 17건. 누적 224 green
-- [ ] 엔진 나머지 이식 (`orchestrator` — AXIS 수집부 제거 대상) + control `dispatch`(핸들러 주입)
+- [x] 엔진 이식 — `orchestrator`: 수집→LLM 브리핑 메커니즘을 `core/orchestrator`(수집기·게이트웨이·시계 **주입**, 소스별 실패 격리)로, youtube 수집(`collect_yt`, `build_report` 주입)·프롬프트는 `adapters/youtube/orchestrator`로 분리. **원본 AXIS 수집부(`collect_axis`, master_dashboard.db)·프롬프트 AXIS 언급 제거**(범위 제외; 원본 8참조→0). 특성화 11건. 누적 235 green. → **엔진 이식 골격 완료**(잔여: control `dispatch`)
+- [ ] control `dispatch`(핸들러 주입 — 미이식 pipeline 배선)
 - [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
 ## ⬜ Phase 2 — 신뢰 레이어 1차
