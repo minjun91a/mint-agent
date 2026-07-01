@@ -8,6 +8,7 @@
 <sub>A platform-agnostic multi-agent automation engine + trust layer, carved out of a YouTube
 pipeline running in production since April 2026. *The platform is an adapter; the engine is the asset.*</sub>
 
+[![CI](https://github.com/minjun91a/MINT/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/MINT/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
 ![tests](https://img.shields.io/badge/tests-143_passing-brightgreen)
@@ -80,10 +81,10 @@ flowchart LR
 git clone https://github.com/minjun91a/MINT.git
 cd MINT
 
-# 2. 테스트 실행에 필요한 최소 의존성
-pip install pytest pyyaml
+# 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
+pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 143 green
+# 3. 특성화 테스트 (이식 동일성 보증) — 143 green, CI에서도 동일 실행
 python -m pytest
 ```
 

@@ -1,0 +1,7 @@
+# 테스트(특성화 143건) 실행에 필요한 최소 의존성.
+# 핵심: 이 테스트들은 외부 프로바이더 SDK 없이 돈다 — LLM·이미지·업로드 SDK는
+# 주입(백엔드/게이트웨이) 뒤에서 호출 시점에만 지연 로드되기 때문.
+#   실 파이프라인 실행 시 필요: openai · google-generativeai · replicate ·
+#   pillow · imageio-ffmpeg · google-api-python-client (+ 각 API 키)
+pytest>=8
+pyyaml>=6
