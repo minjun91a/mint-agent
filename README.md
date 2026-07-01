@@ -1,111 +1,151 @@
-# mint-agent
+<div align="center">
 
-> **플랫폼 독립 멀티 에이전트 자동화 엔진 + 신뢰(Trust) 레이어.**
-> 데모가 아니라, **2026년 4월부터 운영 중인 YouTube 자동화 파이프라인 위에서 검증**한다.
+# 🌿 mint-agent
 
-> **mint-agent** — A platform-agnostic multi-agent automation engine with a built-in **trust layer**
-> (verification · human-in-the-loop · cost routing · observability), proven on a YouTube content
-> pipeline running in production since April 2026. The platform is an *adapter*; the engine is the asset.
+**운영 중인 YouTube 자동화를 _플랫폼 무관 엔진 + 교체 가능한 어댑터_ 로 가르고,
+그 위에 검증·HITL·비용 라우팅 _신뢰 레이어(trust layer)_ 를 얹는다.**
 
-[![status](https://img.shields.io/badge/status-Phase%200%20done%20·%20Phase%201%20next-blue)]()
-[![lang](https://img.shields.io/badge/lang-Python%203.14-blue)]()
-[![providers](https://img.shields.io/badge/LLM-Claude%20·%20Gemini%20·%20OpenAI-green)]()
+<sub>A platform-agnostic multi-agent automation engine + trust layer, carved out of a YouTube
+pipeline running in production since April 2026. *The platform is an adapter; the engine is the asset.*</sub>
+
+![status](https://img.shields.io/badge/status-Phase_1_WIP-blue)
+![python](https://img.shields.io/badge/python-3.12+-blue)
+![tests](https://img.shields.io/badge/tests-143_passing-brightgreen)
+![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI-green)
+![license](https://img.shields.io/badge/license-MIT-green)
+![last commit](https://img.shields.io/github/last-commit/minjun91a/MINT)
+
+[아키텍처](#-아키텍처) · [빠른 시작](#-빠른-시작) · [개발 블로그](docs/blog/) · [로드맵](docs/roadmap.md) · [ADR](docs/adr/)
+
+</div>
 
 ---
 
-## 왜 (Why)
+## mint-agent란?
 
-AI에게 일을 자동으로 맡기면 세 가지가 문제다 — **환각**(없는 사실을 지어냄), **비용 예측 불가**,
-**관측 불가**(무엇을 했는지 안 보임). mint-agent는 자동화 엔진에 이 셋을 감시·통제하는
-**신뢰 레이어**를 결합한다.
+운영 중인 YouTube 콘텐츠 자동화(2026-04~)를 **플랫폼 무관 엔진(`core/`) + 교체 가능한
+어댑터(`adapters/`)** 로 가르는 중인 프로젝트다. 엔진은 모델 호출·검증·발행 게이트를 *플랫폼을
+모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
+비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-- 자동화만 → "콘텐츠 팜"으로 읽히는 데모.
-- 신뢰 레이어만 → 사용자 0명짜리 데모웨어.
-- **결합 → 실트래픽 위에서 검증된 신뢰 레이어** = 프로덕션에서 버티는 관측 가능·비용 통제 시스템.
+> **현재 Phase 1(엔진/어댑터 경계 분리) 진행 중 — 특성화 테스트 143개 green.**
+> 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
-## 아키텍처 (Architecture)
+## 핵심 기능
+
+- **🔌 플랫폼 무관 어댑터 구조 — ✅ 작동** · `core/`는 어댑터 구체 타입을 모른다. 발행 게이트가
+  youtube가 *아닌* 가짜 어댑터에도 동작함을 테스트로 증명(adapter-agnostic).
+- **🧩 모델 게이트웨이 — ✅ 작동** · Gemini·OpenAI를 같은 `complete` 포트 뒤로 통합. 프로바이더를
+  늘려도 엔진/어댑터 코드는 **0줄 변경**.
+- **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
+  사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 143 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧭 복잡도 기반 비용 라우터 — 🔜 Phase 2** · 게이트웨이 seam 위에 Opus/Sonnet/Haiku 라우팅.
+- **📊 멀티모델 컨센서스 검증 · 관측성 로깅 — 🔜 Phase 2**
+- **💬 Discord HITL 어댑터 — 🔜 Phase 1 후반** · 레거시에서 작동 중, 모노레포 이관 예정.
+
+## 🏗 아키텍처
 
 ```mermaid
-flowchart TB
-  DISCORD["Discord<br/>control · HITL · notify"]:::io
-  subgraph CORE["core — platform-agnostic engine"]
-    ORCH["orchestrator"]
-    ROUTER["model / cost router"]
-    REG["agent registry · perms"]
-    MEM["memory"]
-  end
-  subgraph TRUST["trust layer — cross-cutting"]
-    V["① verify / guardrail"]
-    H["② HITL approval"]
-    C["③ cost routing"]
-    O["④ observability"]
-  end
-  YT["adapters/youtube<br/>produce · review · publish"]:::out
-  RES["adapters/research<br/>(Phase 3)"]:::out
+flowchart LR
+    REQ[콘텐츠 브리프] --> ADP
 
-  DISCORD --> CORE --> TRUST --> YT & RES
-  classDef io fill:#1f2937,color:#fff;
-  classDef out fill:#0e7490,color:#fff;
+    subgraph ADAPTERS["adapters · 교체 가능"]
+        ADP[YouTube 어댑터<br/>produce]
+        PUB[publish]
+    end
+    subgraph CORE["core · 플랫폼 무관 엔진"]
+        GATE{"Trust 게이트<br/>pipeline.gate()"}
+        GW[모델 게이트웨이<br/>Gemini · OpenAI]
+        ROUTER[비용 라우터<br/>Opus·Sonnet·Haiku<br/>🔜 Phase 2]
+    end
+
+    ADP -->|review| GATE
+    GATE -->|approve| PUB
+    GATE -->|review · reject| HITL[HITL 보류<br/>사람 판단]
+    ADP -. LLM 호출 .-> GW
+    GW -. 🔜 .-> ROUTER
+
+    classDef planned stroke-dasharray:5 5,fill:#eeeeee,color:#666;
+    class ROUTER planned;
 ```
 
-> 결합면은 둘이다 — **Discord**(제어·승인·알림) · **YouTube**(콘텐츠 출구).
-> 상세 분류는 [docs/inventory.md](docs/inventory.md).
+> 핵심: **엔진은 어댑터 구체 타입을 모른다.** `gate()`는 `PlatformAdapter` 포트만 받으므로,
+> youtube가 아닌 어떤 어댑터든 끼울 수 있다. 결합면 상세 분류는 [docs/inventory.md](docs/inventory.md).
 
-## 신뢰 레이어 4기둥 (Trust Pillars)
+## 🚀 빠른 시작
 
-| # | 기둥 | 하는 일 | 현 구현 |
-|---|---|---|---|
-| ① | **검증/가드레일** | 발행 *전* 환각·정책 위반 차단 (AI 라벨·저작권·EU AI Act 등) | `compliance` 게이트 ✅ |
-| ② | **HITL 승인** | 위험·애매한 건 Discord 버튼으로 사람 승인 | `approvals` + Discord ✅ |
-| ③ | **비용 라우팅** | 복잡도별 모델 선택(Opus/Sonnet/Haiku) · 비용 계측 | 비용 계측 ✅ · 중앙 라우터 Phase 2 |
-| ④ | **관측성** | 요청별 동작·비용·지연·오류 구조화 로깅 | 파이프라인 알림 ✅ · 지표화 Phase 2 |
+```bash
+# 1. 클론
+git clone https://github.com/minjun91a/MINT.git
+cd MINT
 
-## 측정 지표 (Metrics) — *정의됨, 값은 측정 예정*
+# 2. 테스트 실행에 필요한 최소 의존성
+pip install pytest pyyaml
 
-> 정직 원칙: 측정하지 않은 수치는 적지 않는다. Phase 2 eval 하니스에서 채운다.
+# 3. 특성화 테스트 (이식 동일성 보증) — 143 green
+python -m pytest
+```
 
-| 지표 | 정의 | 현재 |
-|---|---|---|
-| 환각 차단율 | 발행 전 게이트가 잡은 사실오류/위반 비율 | 🔜 Phase 2 |
-| 영상당 비용 | 1편 생성 LLM+API 비용(USD) | 🔜 Phase 2 |
-| 비용 라우팅 절감 | 복잡도 라우팅 전후 비용차 | 🔜 Phase 2 |
-| p95 파이프라인 지연 | produce→publish 소요(s) | 🔜 Phase 2 |
-| HITL 개입율 | 자동 통과 vs 사람 승인 비율 | 🔜 Phase 2 |
+> 전체 파이프라인(실 LLM·이미지·업로드) 실행에는 프로바이더 SDK(`openai`·`google-generativeai`·
+> `replicate`·`pillow`·`imageio-ffmpeg` 등)가 **호출 시점에 지연 로드**되며 API 키가 필요하다
+> (`.env`: `GEMINI_API_KEY` / `OPENAI_API_KEY` / `REPLICATE_API_TOKEN` …).
 
-**현재까지 검증된 운영 사실(🟢):** 2026-04 운영 시작 · 어댑터 코드 26개 모듈(`agents/`) +
-11개 파이프라인/CLI(`tools/`) + 6개 Discord(`bot/`) · 컴플라이언스 감사 로그 26개(jsonl) ·
-멀티 프로바이더(Claude · Gemini · OpenAI · ElevenLabs · FLUX/DALL-E).
+### 최소 예제 — 엔진이 어댑터를 포트로 구동한다 (키 불필요)
 
-## 기술 스택 (Stack)
+```python
+from core.pipeline import gate
+from adapters.youtube.adapter import YouTubeAdapter
 
-- **언어/런타임:** Python 3.14 (LLM·네트워크 호출 async 지향)
-- **LLM:** Anthropic Claude(도구사용 에이전트) · Google Gemini · OpenAI
-- **미디어:** ElevenLabs TTS · FLUX/DALL-E 이미지 · ffmpeg 합성
-- **제어/HITL:** Discord(봇 + REST) · SQLite(승인·메모리)
-- **벡터 DB(계획):** pgvector (Phase 3 research 어댑터)
-- **외부 API:** YouTube Data/Analytics v3
+# 엔진은 어댑터 구체 타입을 모른다 — PlatformAdapter 포트로만 다룬다.
+adapter = YouTubeAdapter(review_deep=False)   # 룰 기반 컴플라이언스 게이트 (오프라인)
 
-## 현재 상태 / 로드맵 (Status)
+script = {"title": "The Murim Genius", "body": "A young martial artist levels up."}
+seo = {"title": "K-Webtoon Short", "description": "Epic short. AI-generated assets used."}
 
-**Phase 0(정리·결정) 완료.** 운영 코드는 youtube-agent에서 검증됨, 모노레포 이관은 Phase 1.
-전체 진행 → [docs/roadmap.md](docs/roadmap.md)
+decision = gate(adapter, script, seo)
+print(decision.proceed)                 # True  → 발행 진행
+print(decision.verdict.recommendation)  # "approve" | "review" | "reject"
+```
 
-| Phase | 내용 | 상태 |
-|---|---|---|
-| 0 | 정리·결정·분류·안전망 | ✅ 완료 |
-| 1 | 엔진/어댑터 경계 분리 + 동작 동일성 테스트 | ⏭️ 다음 |
-| 2 | 신뢰 레이어 1차 (eval·관측성·비용 라우터·가드레일) | ⬜ |
-| 3 | 2번째 어댑터 research/digest (RAG + pgvector) | ⬜ |
-| 4 | 채용용 마감 (아키텍처·지표·데모) | ⬜ |
+> `description`에서 AI 라벨(예: "AI-generated")을 빼면 게이트가 `review`로 바뀌어
+> `proceed=False`(HITL 보류)가 된다 — **Trust ②(사람 승인)를 엔진 레벨에서 강제**한다.
 
-## 문서 (Docs)
+## 📂 프로젝트 구조
 
-- [docs/inventory.md](docs/inventory.md) — 엔진/어댑터/Trust 전수 분류
-- [docs/roadmap.md](docs/roadmap.md) — Phase 진행 추적
-- [docs/adr/](docs/adr/) — 아키텍처 의사결정 기록(ADR)
-- [docs/blog/](docs/blog/) — 개발기
-- [docs/agent-persona.md](docs/agent-persona.md) — 이 repo의 에이전트 페르소나(MINT) 정의·재사용법
+```text
+mint-agent/
+├── core/                   # 플랫폼 무관 엔진
+│   ├── llm.py              # 모델 게이트웨이 (Gemini · OpenAI 프로바이더)
+│   ├── pipeline.py         # PlatformAdapter 포트 + 발행 게이트 gate()
+│   ├── memory.py           # 채널 메모리 (경로 주입)
+│   └── trust/verify.py     # 검증 어휘 (Verdict · Violation · Reviewer)
+├── adapters/
+│   └── youtube/            # produce · review · publish 구현
+│       ├── story_writer.py  seo.py  image_gen.py  captions.py
+│       └── clip_extractor.py  publish.py  review.py  adapter.py
+├── docs/                   # roadmap · inventory · ADR · 개발 블로그
+├── tests/                  # 143 characterization tests
+├── pyproject.toml
+└── LICENSE                 # MIT
+```
+
+## 🗺 로드맵
+
+- [x] **Phase 0** — 정리·결정·git 안전망·엔진/어댑터 인벤토리
+- [ ] **Phase 1 — 진행 중 🔄** · 엔진/어댑터 경계 분리: `review`·`produce`(story_writer·seo·
+  image_gen·captions·clip_extractor)·`publish` 이식 + 모델 게이트웨이(Gemini·OpenAI) +
+  `YouTubeAdapter`·발행 게이트 · *남음: tts·video·thumbnail, 엔진 persona/control/orchestrator, Discord 어댑터*
+- [ ] **Phase 2** — 신뢰 레이어 1차: 복잡도 기반 비용 라우터(Opus/Sonnet/Haiku) · eval 하니스 · 관측성
+- [ ] **Phase 3** — 2번째 어댑터(research/digest): RAG + pgvector, **엔진 변경 0으로 어댑터 추가** = 추상화 증명
+- [ ] **Phase 4** — 채용용 마감: 아키텍처 다이어그램 · 실측 지표 · 데모
+
+전체 진행 추적 → [docs/roadmap.md](docs/roadmap.md) · 결정 기록 → [docs/adr/](docs/adr/) · 빌드 과정 → [docs/blog/](docs/blog/)
+
+## 📜 License
+
+MIT
 
 ---
 
-*이 repo는 개발자(민준)의 AI/백엔드 포트폴리오로, 빌드 과정을 공개 기록한다.*
+<div align="center"><sub>개발자(민준)의 AI/백엔드 포트폴리오 — 빌드 과정을 커밋·ADR·블로그로 공개 기록한다.</sub></div>
