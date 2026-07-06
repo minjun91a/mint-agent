@@ -51,7 +51,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] **eval 후속 — 게이트 결함 교정** — eval이 검출한 score-range 결함을 `adapters/youtube/review.py` LLM 심층 경로에 **클램프**(score→[0,1]) + recommendation enum 검증(미확인→review 안전화)으로 반영. **원본과 의도적 차이**(원본 미정규화 점수를 계약에 맞게 교정). **find→fix→verify 루프 닫힘**: 교정된 Verdict가 `check_invariants`를 통과하는 테스트로 재확인. 특성화 +4. 누적 **322 green**
 - [ ] eval 후속 — daily-drill 검증규칙 연동(검출 패턴을 trust 규칙 후보로)
 - [x] **멀티모델 컨센서스 검증** — `core/trust/consensus.py`. 같은 콘텐츠를 N개 리뷰어로 교차검증 → 순수 `combine`(보수적 결합: reject 우선·전원 통과여야 passed·score 최댓값·위반 병합 + `agreement` consensus/disagree) + `run`(리뷰어 thunk 실행, 실패는 보수적 review로 격리). 리뷰어·모델 주입(엔진은 youtube·모델수 무지). **정직성**: 원본 `double_check` 소스가 youtube-agent에 부재 → *이식이 아니라 재구성*(단 `agreement` 의미는 실 로그에서 관측, 보수적 결합은 프로젝트 원칙에서 도출). 특성화 12건. 누적 **334 green**
-- [ ] 관측성 로깅 → README 지표 테이블 실측값 채우기
+- [x] **관측 대시(리포트 렌더러)** — `core/observability.py`. 계측 데이터를 사람이 읽는 Markdown으로: `render_cost_report`(CallRecord→호출·비용·**실측/근사 비율**·미가격·티어/모델별 표) + `render_gate_report`(AuditRecord→통과율·권고/합의 분포·점수·**모순 건수**) + `dashboard`(묶음). 순수·결정적 테스트 10건. **실 로그 렌더(🟢)**: 게이트 감사 36건 → 통과율 2.8%·reject35/review1·disagree21/consensus15·모순 7건(score_range)까지 legible. 누적 **355 green**
+- [ ] auto 라우팅 옵트인 · Gemini/OpenAI 실단가 확보(라이브 비용 켜기)
 - [ ] 발행 전 가드레일 정비
 
 ## ⬜ Phase 3 — 두 번째 어댑터 (research/digest)
