@@ -124,3 +124,28 @@ def describe(cmd: Command) -> str:
     args_str = ", ".join(f"{k}={v!r}" for k, v in cmd.args.items()) or "(기본값)"
     src = {"rule": "🟢룰", "llm": "🟡AI"}.get(cmd.source, cmd.source)
     return f"{src} `{cmd.intent}({args_str})`  · 신뢰도 {cmd.confidence:.2f}"
+
+
+# ── dispatch: intent → 액션 실행 (핸들러 주입) ─────────────────────────────────
+# 핸들러 = Command를 받아 결과 dict를 돌려주는 콜러블. 엔진은 **어떤 intent가 무엇을 하는지
+# 모른다** — youtube가 파이프라인을 핸들러로 주입한다. 원본 `dispatch`의 intent별 if/elif
+# 배선을 "라우팅 메커니즘(엔진) ↔ 핸들러 맵(어댑터)"으로 가른 것.
+Handler = Callable[[Command], dict]
+
+
+def dispatch(cmd: Command, handlers: dict[str, Handler], *,
+             unknown_msg: str = "unknown intent",
+             unsupported_msg: str = "디스패처 미구현") -> dict:
+    """`Command` → 주입된 핸들러 실행. 원본 `dispatch`의 반환 규약을 보존한다.
+
+    - `unknown` intent → `{"ok": False, "msg": unknown_msg}` (원본과 동일)
+    - 핸들러 없음(미이식 파이프라인 등) → `{"ok": False, "msg": f"{unsupported_msg}: {intent}"}`
+      (원본의 "디스패처 미구현: …"과 동일 — 없는 것을 정직하게 표시)
+    - 있음 → `handler(cmd)` 결과를 그대로 반환(핸들러가 `{"ok": …}` 형태를 책임진다)
+    """
+    if cmd.intent == "unknown":
+        return {"ok": False, "msg": unknown_msg}
+    handler = handlers.get(cmd.intent)
+    if handler is None:
+        return {"ok": False, "msg": f"{unsupported_msg}: {cmd.intent}"}
+    return handler(cmd)

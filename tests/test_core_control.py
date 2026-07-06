@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 
-from core.control import Command, IntentRouter, Rule, describe
+from core.control import Command, IntentRouter, Rule, describe, dispatch
 
 TOY_RULES = [
     Rule(re.compile(r"\bhi\b", re.I), "greet"),
@@ -103,3 +103,30 @@ def test_describe_rule_llm_unknown():
     assert "🟢룰" in describe(Command(intent="add", args={"n": 1}, source="rule"))
     assert "🟡AI" in describe(Command(intent="add", source="llm"))
     assert "인식 실패" in describe(Command(intent="unknown", explain="x"))
+
+
+# ── dispatch (핸들러 주입) — 엔진은 intent가 뭘 하는지 모른다 ──
+
+def test_dispatch_routes_to_injected_handler():
+    handlers = {"add": lambda cmd: {"ok": True, "result": cmd.args["n"] + 1}}
+    assert dispatch(Command(intent="add", args={"n": 6}), handlers)["result"] == 7
+
+
+def test_dispatch_unknown_intent():
+    assert dispatch(Command(intent="unknown"), {}) == {"ok": False, "msg": "unknown intent"}
+
+
+def test_dispatch_missing_handler_is_unsupported():
+    out = dispatch(Command(intent="greet"), {})
+    assert out["ok"] is False and "미구현" in out["msg"] and "greet" in out["msg"]
+
+
+def test_dispatch_is_platform_agnostic():
+    # 엔진 dispatch는 youtube를 모른다 — 토이 intent/핸들러로도 동작한다.
+    handlers = {"toy": lambda cmd: {"ok": True, "result": "done"}}
+    assert dispatch(Command(intent="toy"), handlers)["result"] == "done"
+
+
+def test_dispatch_custom_messages():
+    out = dispatch(Command(intent="x"), {}, unsupported_msg="no handler")
+    assert out["msg"] == "no handler: x"

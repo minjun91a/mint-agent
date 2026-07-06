@@ -6,7 +6,8 @@ adapters.youtube.control 특성화 테스트 — youtube 룰 라우팅(결정적
 """
 from __future__ import annotations
 
-from adapters.youtube.control import parse, parse_rule
+from core.control import Command
+from adapters.youtube.control import build_handlers, dispatch, parse, parse_rule
 
 
 def _intent(text: str) -> str:
@@ -88,3 +89,84 @@ def test_rule_command_metadata():
     cmd = parse_rule("브리핑")
     assert cmd.source == "rule"
     assert cmd.confidence == 0.95
+
+
+# ── dispatch: 핸들러 맵 (파이프라인 주입, 원본 arg 추출 parity) ──
+
+def test_story_handler_extracts_no_upload():
+    calls = {}
+
+    def run_story(*, upload):
+        calls["upload"] = upload
+        return "vid"
+
+    out = dispatch(Command(intent="story", args={"no_upload": True}), run_story=run_story)
+    assert out == {"ok": True, "result": "vid"} and calls["upload"] is False
+
+
+def test_story_gem_handler_extracts_category_and_model():
+    calls = {}
+
+    def run_gem(*, category, model):
+        calls.update(category=category, model=model)
+        return "g"
+
+    dispatch(Command(intent="story_gem", args={"category": "Murim", "model": "gemini-2.5-pro"}),
+             run_story_gem=run_gem)
+    assert calls == {"category": "Murim", "model": "gemini-2.5-pro"}
+
+
+def test_story_gem_default_model():
+    calls = {}
+    dispatch(Command(intent="story_gem", args={}),
+             run_story_gem=lambda *, category, model: calls.update(model=model))
+    assert calls["model"] == "gemini-2.5-flash"          # 원본 기본값
+
+
+def test_series_handler_extracts_shorts():
+    calls = {}
+    dispatch(Command(intent="series", args={"shorts": 4}),
+             run_series=lambda *, top_shorts: calls.update(n=top_shorts))
+    assert calls["n"] == 4
+
+
+def test_research_handler_extracts_query_and_top():
+    calls = {}
+    dispatch(Command(intent="research", args={"query": "AI shorts", "top": 3}),
+             run_research=lambda q, *, top_k: calls.update(q=q, k=top_k))
+    assert calls == {"q": "AI shorts", "k": 3}
+
+
+def test_brief_handler_wires_injected_callable():
+    assert dispatch(Command(intent="brief"), run_brief=lambda: "briefing") == {
+        "ok": True, "result": "briefing"}
+
+
+def test_daily_handler_wraps_text():
+    assert dispatch(Command(intent="daily"), daily_report=lambda: "report") == {
+        "ok": True, "result": {"text": "report"}}
+
+
+def test_channel_info_handler():
+    assert dispatch(Command(intent="channel_info"),
+                    channel_info=lambda: {"title": "X"})["result"] == {"title": "X"}
+
+
+def test_help_always_present():
+    out = dispatch(Command(intent="help"))
+    assert out["ok"] is True and "/brief" in out["msg"]
+
+
+def test_uninjected_pipeline_is_unsupported():
+    # 미이식 파이프라인(story) 미주입 → 엔진이 "미구현"으로 정직하게 응답.
+    out = dispatch(Command(intent="story", args={}))
+    assert out["ok"] is False and "미구현" in out["msg"] and "story" in out["msg"]
+
+
+def test_unknown_intent_dispatch():
+    assert dispatch(Command(intent="unknown")) == {"ok": False, "msg": "unknown intent"}
+
+
+def test_build_handlers_omits_uninjected():
+    handlers = build_handlers(run_brief=lambda: "b")
+    assert set(handlers) == {"help", "brief"}            # 주입한 것 + help만
