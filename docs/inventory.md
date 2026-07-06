@@ -145,6 +145,7 @@ Discord 없이 단발 실행. 엔진/어댑터 호출의 얇은 진입점(라우
 ## 8. Phase 1 경계 분리 시 핵심 쟁점
 
 1. **2중 결합 분해** — Discord(IO)·YouTube(출력)를 각각 어댑터로 빼고, `core/`는 인터페이스만 의존.
+   → **실현(Phase 1 완료, 2026-07-06):** YouTube=`YouTubeAdapter`(PlatformAdapter). Discord=`adapters/discord/`(채널 정체성 `channels` + youtube 페르소나 라우팅 `personas`, 의존 방향 IO→콘텐츠). `core/`는 Discord·YouTube 어느 쪽도 하드코딩하지 않음(persona resolver·platform adapter를 주입). *경계 분리까지 — 봇 런타임 이식은 범위 밖.* 🟢
 2. **모델 호출 추상화** — Gemini/OpenAI/Claude 직접호출이 모듈마다 산재 → `core/` 단일 모델 게이트웨이로 모으면
    비용라우팅(③)·관측성(④)이 자동으로 한 곳에 모인다.
    → **실현: `core/llm.py`**(`LLMGateway` 포트 + `GeminiGateway` + `OpenAIGateway`). seo·review(Gemini)·story_writer(OpenAI) 호출부를 통합 — 같은 `complete` 포트가 두 프로바이더에 동일 매핑되어 **프로바이더 교체 시 엔진/어댑터 불변**. Claude 백엔드·비용 라우팅·관측 래퍼는 Phase 2에서 같은 seam에 추가.

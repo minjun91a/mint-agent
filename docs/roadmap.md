@@ -15,7 +15,7 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] 엔진/어댑터/Trust 전수 분류 → [inventory.md](inventory.md)
 - [x] 개발 블로그 시작 → [blog/](blog/)
 
-## 🔄 Phase 1 — 엔진/어댑터 경계 분리 *(진행 중)*
+## ✅ Phase 1 — 엔진/어댑터 경계 분리 *(완료 2026-07-06)*
 
 - [x] **선결: 동작 동일성 테스트 하니스** — pytest 골격(`tests/`, `pyproject.toml`), 원본 대조 parity 검증
 - [x] `review` 단계 — `core/trust/verify.py`(Verdict/Violation/Reviewer 포트) + `adapters/youtube/review.py`(compliance 동작 동일 이식, 특성화 10건 + 원본 parity)
@@ -34,8 +34,10 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] 엔진 이식 — `control` 라우터: **inventory의 "경계 혼재" 해소**. 라우팅 메커니즘을 `core/control.py`(`IntentRouter` = 룰 + 게이트웨이 LLM 폴백, 플랫폼 무관)로, youtube intent 어휘·정규식 룰·arg 추출은 `adapters/youtube/control.py`로 분리. 룰 경로 원본 parity(IDENTICAL x15), 게이트웨이 재사용. 특성화 24건. 누적 207 green. (`dispatch`=액션 배선은 미이식 pipeline 의존 → orchestration 슬라이스로 미룸)
 - [x] 엔진 이식 — `persona`: control과 같은 분리(엔진 `core/persona` = `Persona`·`PersonaRegistry`·`ask`[메모리·게이트웨이·agent_runner 주입] / 어댑터 `adapters/youtube/persona` = 페르소나 정의·Discord 채널 매핑). memory=`core/memory` 재사용, Gemini=게이트웨이(`json_mode=False`), claude=`agent_runner` seam(미이식 claude_runner 대체). **AXIS 언급 제거**(범위 제외 결정). 구조 parity(키·env맵·기본값 동일, AXIS 2→0). 특성화 17건. 누적 224 green
 - [x] 엔진 이식 — `orchestrator`: 수집→LLM 브리핑 메커니즘을 `core/orchestrator`(수집기·게이트웨이·시계 **주입**, 소스별 실패 격리)로, youtube 수집(`collect_yt`, `build_report` 주입)·프롬프트는 `adapters/youtube/orchestrator`로 분리. **원본 AXIS 수집부(`collect_axis`, master_dashboard.db)·프롬프트 AXIS 언급 제거**(범위 제외; 원본 8참조→0). 특성화 11건. 누적 235 green. → **엔진 이식 골격 완료**(잔여: control `dispatch`)
-- [ ] control `dispatch`(핸들러 주입 — 미이식 pipeline 배선)
-- [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
+- [x] control `dispatch` — **핸들러 주입**. 엔진 `core.control.dispatch`(intent→핸들러 라우팅, 미주입 intent는 "미구현"으로 정직 응답)와 어댑터 `adapters/youtube/control.build_handlers`(intent→파이프라인 매핑, 파이프라인은 콜러블 주입; `discord=True` IO 결합은 콜러블 책임으로 제거)로 분리. 원본 arg 추출(no_upload·category/model·shorts·query/top) parity. 토이 핸들러로 엔진 범용성 증명. 특성화 +17. 누적 294 green
+- [x] **2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)** — YouTube(출력)는 이미 `YouTubeAdapter`=`PlatformAdapter`. Discord(IO)는 youtube persona 어댑터에 섞여 있던 **채널 정체성 매핑을 `adapters/discord/`로 분리**(`channels.channel_key_from_env` + `personas.resolve`). 의존 방향 IO→콘텐츠(discord→youtube)로 정리, youtube persona는 **Discord를 import 안 함**(콘텐츠 전용, resolver 주입). 엔진은 양쪽 다 모름(`PersonaRegistry`가 resolver 주입). 원본 env 매핑 parity. 특성화 +7. 누적 **301 green**. *(경계 분리 완료. 실제 봇 런타임 discord_bot·notifier·approvals 이식은 범위 밖 — 잔여 Discord 문자열: engineer 페르소나 prompt 언급·`perms_env_key`는 agent_perms 이식 시 정리)*
+
+> **Phase 1 완료.** 엔진(`core/`)은 플랫폼(YouTube·Discord)을 모른 채 포트로만 의존하고, 플랫폼 로직은 어댑터에 격리됨을 테스트로 증명. produce 전 단계 + review/publish + 엔진 5모듈(llm·memory·pipeline·control·persona·orchestrator) + 게이트웨이 3프로바이더 + 비용 라우터(Phase 2 선행 착수) 이식 완료.
 
 ## 🔄 Phase 2 — 신뢰 레이어 1차 *(착수)*
 

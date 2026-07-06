@@ -9,9 +9,9 @@
 pipeline running in production since April 2026. *The platform is an adapter; the engine is the asset.*</sub>
 
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
-![status](https://img.shields.io/badge/status-Phase_1_WIP-blue)
+![status](https://img.shields.io/badge/status-Phase_1_done_|_Phase_2_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-277_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-301_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **현재 Phase 1(엔진/어댑터 경계 분리) 진행 중 — 특성화 테스트 277개 green.**
+> **Phase 1(엔진/어댑터 경계 분리) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 301개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -46,11 +46,13 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   *지어내지 않는다.* 실단가·실측 usage 연동은 Phase 2 잔여.
 - **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 277 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 301 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **📊 멀티모델 컨센서스 검증 · 관측성 로깅 — 🔜 Phase 2** · 응답을 여러 모델로 교차 검증해
   환각을 잡고 교정·기록하는 것이 목표. 검증 규칙은 매일의 코드 검증 훈련([daily-drill](https://github.com/minjun91a/daily-drill))에서
   반복 발견한 *"그럴듯하지만 틀린"* 패턴을 코드화해 채운다 — 현재 3일차(SQL·pandas·Python), 규칙 후보 축적 중.
-- **💬 Discord HITL 어댑터 — 🔜 Phase 1 후반** · 레거시에서 작동 중, 모노레포 이관 예정.
+- **💬 Discord IO 경계 분리 — ✅ 채널 정체성 분리** · 채널→역할 매핑을 `adapters/discord/`로 분리
+  (의존 방향 IO→콘텐츠), youtube 어댑터는 Discord를 모른다. *봇 런타임(discord_bot·notifier·approvals)
+  이식은 🔜 별도 IO 어댑터 작업.*
 
 ## 🏗 아키텍처
 
@@ -84,7 +86,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 277 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 301 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -146,12 +148,13 @@ mint-agent/
 │   ├── memory.py           # 채널 메모리 (경로 주입)
 │   └── trust/verify.py     # 검증 어휘 (Verdict · Violation · Reviewer)
 ├── adapters/
-│   └── youtube/            # produce · review · publish 구현 + 도메인 어휘
-│       ├── story_writer.py  seo.py  image_gen.py  captions.py  tts_engine.py
-│       ├── video_builder.py  thumbnail_gen.py  clip_extractor.py
-│       └── publish.py  review.py  adapter.py  control.py  persona.py  orchestrator.py
+│   ├── youtube/            # produce · review · publish 구현 + 도메인 어휘 (콘텐츠)
+│   │   ├── story_writer.py  seo.py  image_gen.py  captions.py  tts_engine.py
+│   │   ├── video_builder.py  thumbnail_gen.py  clip_extractor.py
+│   │   └── publish.py  review.py  adapter.py  control.py  persona.py  orchestrator.py
+│   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 277 characterization tests
+├── tests/                  # 301 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```
@@ -159,11 +162,12 @@ mint-agent/
 ## 🗺 로드맵
 
 - [x] **Phase 0** — 정리·결정·git 안전망·엔진/어댑터 인벤토리
-- [ ] **Phase 1 — 진행 중 🔄** · 엔진/어댑터 경계 분리: `review`·`produce` 전 단계(story_writer·seo·
+- [x] **Phase 1 — 완료 ✅** · 엔진/어댑터 경계 분리: `review`·`produce` 전 단계(story_writer·seo·
   image_gen·captions·clip_extractor·tts·video·thumbnail)·`publish` 이식 + 모델 게이트웨이(Gemini·OpenAI·Claude) +
-  엔진 control/persona/orchestrator + `YouTubeAdapter`·발행 게이트 · *남음: control dispatch, Discord 어댑터*
-- [ ] **Phase 2 — 착수 🔄** · 신뢰 레이어 1차: 복잡도 기반 비용 라우터(Opus/Sonnet/Haiku) **✅ 엔진 구현** ·
-  *남음: 파이프라인 실배선 · 실측 usage 연동 · eval 하니스 · 컨센서스 검증 · 관측성 대시*
+  엔진 control(라우터+dispatch)/persona/orchestrator + `YouTubeAdapter`·발행 게이트 + **2중 결합 분해**(Discord IO를
+  `adapters/discord/`로, youtube는 콘텐츠 전용). 엔진은 플랫폼을 모른 채 포트로만 의존 — 테스트로 증명
+- [ ] **Phase 2 — 진행 중 🔄** · 신뢰 레이어 1차: 복잡도 기반 비용 라우터(Opus/Sonnet/Haiku) **✅ 엔진 구현 + 관측 배선** ·
+  *남음: 실단가·auto 라우팅·실측 usage 연동 · eval 하니스 · 컨센서스 검증 · 관측성 대시*
 - [ ] **Phase 3** — 2번째 어댑터(research/digest): RAG + pgvector, **엔진 변경 0으로 어댑터 추가** = 추상화 증명
 - [ ] **Phase 4** — 채용용 마감: 아키텍처 다이어그램 · 실측 지표 · 데모
 

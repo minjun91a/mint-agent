@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
 """
-adapters.youtube.persona 테스트 — youtube 페르소나 정의·Discord 채널 매핑.
+adapters.youtube.persona 테스트 — youtube 페르소나 *정의*(콘텐츠). Discord 채널 매핑은 분리됨.
 
 원본 페르소나 세트를 고정하고, 이식 시 제거하기로 한 AXIS 언급이 없는지 검증한다.
+채널→페르소나 라우팅(Discord IO)은 `test_discord_channels.py`에서 다룬다.
 """
 from __future__ import annotations
 
-from adapters.youtube.persona import all_personas, resolve
+from adapters.youtube.persona import all_personas, build_registry, resolve
 
 
-def test_resolve_by_env_channel(monkeypatch):
-    monkeypatch.setenv("DISCORD_CHANNEL_RESEARCH", "12345")
-    assert resolve("12345").key == "research"
-    assert resolve(12345).key == "research"          # int도 허용
+def test_youtube_persona_is_discord_free_by_default():
+    # 해석기 미주입이면 채널 라우팅이 없어 default (youtube는 Discord를 모른다).
+    assert resolve("12345").key == "default"
 
 
-def test_resolve_unmapped_channel_is_default(monkeypatch):
-    monkeypatch.delenv("DISCORD_CHANNEL_RESEARCH", raising=False)
-    assert resolve("99999").key == "default"
+def test_resolve_accepts_injected_channel_key():
+    # 채널 해석기를 주입하면 라우팅된다(엔진 PersonaRegistry가 resolver를 받는 구조).
+    reg = build_registry(channel_key=lambda cid: "research" if cid == "42" else None)
+    assert reg.resolve("42").key == "research"
+    assert reg.resolve("99").key == "default"
 
 
 def test_all_personas_has_expected_keys():

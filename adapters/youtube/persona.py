@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-adapters.youtube.persona — youtube 도메인의 페르소나 정의 + Discord 채널 매핑 (persona 어댑터 절반).
+adapters.youtube.persona — youtube 도메인의 페르소나 *정의* (persona 어댑터의 콘텐츠 절반).
 
 호출 메커니즘(메모리·게이트웨이 주입, 프롬프트 구성)은 엔진(`core.persona`)에 있고, 여기서는
-youtube 운영 채널별 system prompt·정책과 Discord 채널 ID 매핑을 정의해 레지스트리를 구성한다.
+youtube 운영 역할별 system prompt·정책만 정의한다. **Discord 채널 매핑은 여기서 분리**됐다
+(`adapters/discord/channels.py`) — 이 모듈은 이제 Discord를 모른다. 채널 라우팅이 필요하면
+`build_registry(channel_key=...)`로 해석기를 주입하거나 `adapters.discord.personas.resolve`를 쓴다.
 
 이식 시 정리: 원본 orchestrator·engineer 페르소나의 **AXIS(외부 비즈니스 연동) 언급을 제거**한다
 (AXIS는 프로젝트 범위에서 제외 — 되살리지 않는다).
 """
 from __future__ import annotations
 
-import os
+from typing import Callable
 
 from core.persona import Persona, PersonaRegistry
 
@@ -103,36 +105,19 @@ _PERSONAS: dict[str, Persona] = {
     ),
 }
 
-# 환경변수(Discord 채널 ID) → 페르소나 키 (원본과 동일)
-_ENV_KEY_BY_KEY = {
-    "research":     "DISCORD_CHANNEL_RESEARCH",
-    "orchestrator": "DISCORD_CHANNEL_ORCHESTRATOR",
-    "control":      "DISCORD_CHANNEL_CONTROL",
-    "status":       "DISCORD_CHANNEL_STATUS",
-    "daily":        "DISCORD_CHANNEL_DAILY",
-    "guide":        "DISCORD_CHANNEL_GUIDE",
-    "engineer":     "DISCORD_CHANNEL_ENGINEER",
-    "planner":      "DISCORD_CHANNEL_PLANNING",
-}
+def build_registry(channel_key: Callable[[str], str | None] | None = None) -> PersonaRegistry:
+    """youtube 페르소나 레지스트리. 채널→역할 해석기는 **주입**(기본 None = 라우팅 없음).
+
+    Discord 채널 라우팅은 `adapters.discord.channels.channel_key_from_env`를 주입해서 얻는다
+    (또는 `adapters.discord.personas.build_registry_for_discord`). youtube 자체는 IO를 모른다.
+    """
+    return PersonaRegistry(_PERSONAS, _DEFAULT, channel_key=channel_key)
 
 
-def channel_key_from_env(channel_id: str) -> str | None:
-    """Discord 채널 ID → 페르소나 키(.env의 DISCORD_CHANNEL_* 매칭). 미설정이면 None."""
-    cid = str(channel_id).strip()
-    for key, env in _ENV_KEY_BY_KEY.items():
-        if os.getenv(env, "").strip() == cid and cid:
-            return key
-    return None
-
-
-def build_registry() -> PersonaRegistry:
-    """youtube 페르소나 레지스트리(엔진 `PersonaRegistry`에 정의·채널 매핑 주입)."""
-    return PersonaRegistry(_PERSONAS, _DEFAULT, channel_key=channel_key_from_env)
-
-
-def resolve(channel_id: str | int) -> Persona:
-    """채널 ID → Persona. 매핑 없으면 default. 원본 `resolve`의 youtube 구성."""
-    return build_registry().resolve(channel_id)
+def resolve(channel_id: str | int,
+            channel_key: Callable[[str], str | None] | None = None) -> Persona:
+    """채널 ID → Persona. 해석기 미주입이면 매핑이 없어 default. (Discord 라우팅은 discord 어댑터)"""
+    return build_registry(channel_key).resolve(channel_id)
 
 
 def all_personas() -> dict[str, Persona]:
