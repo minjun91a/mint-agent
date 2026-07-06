@@ -10,10 +10,25 @@ from __future__ import annotations
 import sys
 import types
 
-from core.llm import ClaudeGateway, GeminiGateway, LLMGateway, OpenAIGateway
+from core.llm import (
+    ClaudeGateway,
+    Completion,
+    GeminiGateway,
+    LLMGateway,
+    OpenAIGateway,
+    Usage,
+    UsageAwareGateway,
+)
 
 
-def _install_fake_genai(monkeypatch, *, text: str | None):
+class _NS:
+    """테스트용 간이 네임스페이스(속성 주머니) — provider usage 객체 흉내."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+def _install_fake_genai(monkeypatch, *, text: str | None, usage=None):
     """가짜 `google.generativeai`를 sys.modules에 심고, 받은 인자를 기록할 dict를 돌려준다."""
     calls: dict = {}
 
@@ -23,6 +38,9 @@ def _install_fake_genai(monkeypatch, *, text: str | None):
     class _Resp:
         def __init__(self, t):
             self.text = t
+            if usage is not None:
+                self.usage_metadata = _NS(prompt_token_count=usage[0],
+                                          candidates_token_count=usage[1])
 
     class GenerativeModel:
         def __init__(self, *, model_name, system_instruction, generation_config):
@@ -106,7 +124,7 @@ def test_complete_uses_env_key_when_not_explicit(monkeypatch):
 
 # ── OpenAIGateway: 프로바이더 #2 — 같은 포트, 다른 SDK 매핑 ──
 
-def _install_fake_openai(monkeypatch, *, content: str | None):
+def _install_fake_openai(monkeypatch, *, content: str | None, usage=None):
     """가짜 `openai`를 sys.modules에 심고, chat.completions.create 인자를 기록한다."""
     calls: dict = {}
 
@@ -121,6 +139,8 @@ def _install_fake_openai(monkeypatch, *, content: str | None):
     class _Resp:
         def __init__(self, c):
             self.choices = [_Choice(c)]
+            if usage is not None:
+                self.usage = _NS(prompt_tokens=usage[0], completion_tokens=usage[1])
 
     class _Completions:
         def create(self, **kwargs):
@@ -179,7 +199,7 @@ def test_openai_complete_empty_falls_back_to_empty_object(monkeypatch):
 
 # ── ClaudeGateway: 프로바이더 #3 — messages API 매핑 ──
 
-def _install_fake_anthropic(monkeypatch, *, text: str | None):
+def _install_fake_anthropic(monkeypatch, *, text: str | None, usage=None):
     """가짜 `anthropic`을 sys.modules에 심고, messages.create 인자를 기록한다."""
     calls: dict = {}
 
@@ -190,6 +210,8 @@ def _install_fake_anthropic(monkeypatch, *, text: str | None):
     class _Resp:
         def __init__(self, t):
             self.content = [] if t is None else [_Block(t)]
+            if usage is not None:
+                self.usage = _NS(input_tokens=usage[0], output_tokens=usage[1])
 
     class _Messages:
         def create(self, **kwargs):
@@ -240,3 +262,41 @@ def test_claude_json_mode_appends_instruction(monkeypatch):
 def test_claude_complete_empty_falls_back_to_empty_object(monkeypatch):
     _install_fake_anthropic(monkeypatch, text=None)
     assert ClaudeGateway(api_key="k").complete("S", "P", model="m") == "{}"
+
+
+# ── complete_ex: 실측 usage 노출 (하위호환 확장 포트) ──
+
+def test_gateways_are_usage_aware():
+    for gw in (GeminiGateway(), OpenAIGateway(), ClaudeGateway()):
+        assert isinstance(gw, UsageAwareGateway)
+
+
+def test_gemini_complete_ex_extracts_usage(monkeypatch):
+    _install_fake_genai(monkeypatch, text='{"x":1}', usage=(120, 34))
+    comp = GeminiGateway(api_key="k").complete_ex("S", "P", model="m")
+    assert isinstance(comp, Completion) and comp.text == '{"x":1}'
+    assert comp.usage == Usage(120, 34)
+
+
+def test_openai_complete_ex_extracts_usage(monkeypatch):
+    _install_fake_openai(monkeypatch, content="hi", usage=(50, 12))
+    comp = OpenAIGateway(api_key="k").complete_ex("S", "P", model="m")
+    assert comp.text == "hi" and comp.usage == Usage(50, 12)
+
+
+def test_claude_complete_ex_extracts_usage(monkeypatch):
+    _install_fake_anthropic(monkeypatch, text="ok", usage=(200, 80))
+    comp = ClaudeGateway(api_key="k").complete_ex("S", "P", model="m")
+    assert comp.text == "ok" and comp.usage == Usage(200, 80)
+
+
+def test_complete_ex_usage_none_when_provider_omits(monkeypatch):
+    # provider가 usage를 안 주면 None (지어내지 않음) — 라우터는 근사로 폴백한다.
+    _install_fake_openai(monkeypatch, content="hi")   # usage 미지정
+    assert OpenAIGateway(api_key="k").complete_ex("S", "P", model="m").usage is None
+
+
+def test_complete_still_returns_str_via_complete_ex(monkeypatch):
+    # 하위호환: complete는 여전히 str만 반환(complete_ex.text 위임).
+    _install_fake_genai(monkeypatch, text="  plain  ", usage=(1, 2))
+    assert GeminiGateway(api_key="k").complete("S", "P", model="m") == "plain"

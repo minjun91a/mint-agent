@@ -36,7 +36,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from core.llm import LLMGateway
+from core.llm import LLMGateway, UsageAwareGateway
 
 log = logging.getLogger("mint.core.routing")
 
@@ -189,6 +189,7 @@ class CallRecord:
     temperature: float
     json_mode: bool
     reasons: list[str] = field(default_factory=list)
+    token_source: str = "estimated"   # "measured"(provider usage) | "estimated"(문자수 근사)
 
 
 # sink = 레코드 소비자. 파일 로깅·메모리 수집·메트릭 전송 등 무엇이든 주입 가능.
@@ -225,6 +226,7 @@ def aggregate(records: list[CallRecord]) -> dict:
     report: dict = {
         "calls": len(records),
         "unpriced_calls": 0,
+        "measured_calls": 0,     # provider 실측 토큰을 쓴 호출 수(나머지는 문자수 근사)
         "in_tokens": 0,
         "out_tokens": 0,
         "cost_usd": 0.0,
@@ -234,6 +236,8 @@ def aggregate(records: list[CallRecord]) -> dict:
     for rec in records:
         report["in_tokens"] += rec.in_tokens
         report["out_tokens"] += rec.out_tokens
+        if rec.token_source == "measured":
+            report["measured_calls"] += 1
         if rec.cost_usd is None:
             report["unpriced_calls"] += 1
         else:
@@ -298,11 +302,15 @@ class CostRouter:
         score = cls.score if cls else 0
         reasons = cls.reasons if cls else ["explicit-model"]
 
-        text = self._gw.complete(system, prompt, model=chosen,
-                                 temperature=temperature, json_mode=json_mode)
+        # 게이트웨이가 usage를 노출하면(UsageAwareGateway) 실측 토큰을, 아니면 문자수 근사를 쓴다.
+        text, usage = self._invoke(system, prompt, chosen, temperature, json_mode)
+        if usage is not None:
+            in_tokens, out_tokens, token_source = usage.input_tokens, usage.output_tokens, "measured"
+        else:
+            in_tokens = estimate_tokens(system) + estimate_tokens(prompt)
+            out_tokens = estimate_tokens(text)
+            token_source = "estimated"
 
-        in_tokens = estimate_tokens(system) + estimate_tokens(prompt)
-        out_tokens = estimate_tokens(text)
         # 단가가 있는 모델만 비용을 매긴다. 없으면 None(미가격) — 폴백가로 지어내지 않는다.
         cost = (estimate_cost(chosen, in_tokens, out_tokens, pricing=self._pricing)
                 if is_priced(chosen, self._pricing) else None)
@@ -310,9 +318,20 @@ class CostRouter:
             model=chosen, tier=tier_label, complexity_score=score,
             in_tokens=in_tokens, out_tokens=out_tokens, cost_usd=cost,
             temperature=temperature, json_mode=json_mode, reasons=reasons,
+            token_source=token_source,
         )
         self._emit(rec)
         return text
+
+    def _invoke(self, system, prompt, model, temperature, json_mode):
+        """실제 호출을 감싼 게이트웨이에 위임. usage 노출 게이트웨이면 (text, Usage), 아니면 (text, None)."""
+        if isinstance(self._gw, UsageAwareGateway):
+            comp = self._gw.complete_ex(system, prompt, model=model,
+                                        temperature=temperature, json_mode=json_mode)
+            return comp.text, comp.usage
+        text = self._gw.complete(system, prompt, model=model,
+                                 temperature=temperature, json_mode=json_mode)
+        return text, None
 
     def _emit(self, rec: CallRecord) -> None:
         if self._sink is None:

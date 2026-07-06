@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from core.llm import LLMGateway
+from core.llm import Completion, LLMGateway, Usage
 from core.routing import (
     AUTO,
     DEFAULT_PRICING,
@@ -48,6 +48,25 @@ class _FakeGateway:
         self.calls.append({"system": system, "prompt": prompt, "model": model,
                            "temperature": temperature, "json_mode": json_mode})
         return self._reply
+
+
+class _UsageGateway:
+    """complete_ex로 실측 usage를 노출하는 가짜 게이트웨이(UsageAwareGateway)."""
+
+    available = True
+
+    def __init__(self, *, reply="ok", usage=Usage(100, 50)):
+        self._reply = reply
+        self._usage = usage
+        self.calls: list = []
+
+    def complete(self, system, prompt, *, model, temperature=0.4, json_mode=True):
+        return self.complete_ex(system, prompt, model=model,
+                                temperature=temperature, json_mode=json_mode).text
+
+    def complete_ex(self, system, prompt, *, model, temperature=0.4, json_mode=True):
+        self.calls.append({"model": model})
+        return Completion(text=self._reply, usage=self._usage)
 
 
 # 티어를 결정적으로 가르는 토이 라우트/가격(Claude 무관 = 엔진 범용성).
@@ -293,3 +312,49 @@ def test_default_route_targets_are_all_priced():
 
     for model in DEFAULT_ROUTE.values():
         assert model in DEFAULT_PRICING          # 기본 라우트의 모든 모델은 단가 출처가 있다
+
+
+# ── 실측 usage: provider가 주면 실측, 아니면 근사 ──
+
+def test_router_uses_measured_usage_when_gateway_exposes_it():
+    records: list[CallRecord] = []
+    gw = _UsageGateway(usage=Usage(100, 50))
+    router = CostRouter(gw, route=_TOY_ROUTE, pricing=_TOY_PRICING, sink=records.append)
+    router.complete("아주 긴 시스템 프롬프트" * 50, "설계 분석", model=AUTO)
+    r = records[0]
+    assert r.in_tokens == 100 and r.out_tokens == 50   # 근사 아님 — provider 실측 그대로
+    assert r.token_source == "measured"
+
+
+def test_router_falls_back_to_estimate_without_usage_gateway():
+    records: list[CallRecord] = []
+    router = CostRouter(_FakeGateway(reply="abcd"), route=_TOY_ROUTE,
+                        pricing=_TOY_PRICING, sink=records.append)
+    router.complete("", "요약", model=AUTO)
+    assert records[0].token_source == "estimated"        # complete_ex 없음 → 문자수 근사
+
+
+def test_router_usage_none_falls_back_to_estimate():
+    records: list[CallRecord] = []
+    gw = _UsageGateway(reply="abcdefgh", usage=None)      # usage-aware지만 usage 미노출
+    router = CostRouter(gw, route=_TOY_ROUTE, pricing=_TOY_PRICING, sink=records.append)
+    router.complete("", "요약", model=AUTO)
+    assert records[0].token_source == "estimated"
+    assert records[0].out_tokens == 2                    # 8자 → ceil(8/4) 근사
+
+
+def test_measured_cost_uses_real_tokens():
+    records: list[CallRecord] = []
+    gw = _UsageGateway(usage=Usage(1000, 500))
+    router = CostRouter(gw, route=_TOY_ROUTE, pricing=_TOY_PRICING, sink=records.append)
+    router.complete("", "설계 분석", model=AUTO)          # → toy-deep(priced)
+    assert records[0].cost_usd == pytest.approx(
+        estimate_cost("toy-deep", 1000, 500, pricing=_TOY_PRICING))
+
+
+def test_aggregate_counts_measured_calls():
+    recs = [
+        CallRecord("m", "deep", 0, 10, 5, 0.001, 0.4, True, [], "measured"),
+        CallRecord("m", "deep", 0, 10, 5, 0.001, 0.4, True, [], "estimated"),
+    ]
+    assert aggregate(recs)["measured_calls"] == 1

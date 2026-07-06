@@ -28,12 +28,29 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 log = logging.getLogger("mint.core.llm")
 
 # 응답이 비어 올 때의 안전 기본값 — 호출부는 JSON 파싱을 기대하므로 빈 객체로 폴백.
 _EMPTY_JSON = "{}"
+
+
+@dataclass(frozen=True)
+class Usage:
+    """한 호출의 provider 실측 토큰 사용량. 근사(문자수 기반)와 구분되는 '진짜' 값."""
+
+    input_tokens: int
+    output_tokens: int
+
+
+@dataclass(frozen=True)
+class Completion:
+    """`complete_ex`의 결과 — 텍스트 + (있으면) 실측 usage. usage=None이면 provider가 미노출."""
+
+    text: str
+    usage: Usage | None = None
 
 
 @runtime_checkable
@@ -49,6 +66,33 @@ class LLMGateway(Protocol):
                  temperature: float = 0.4, json_mode: bool = True) -> str:
         """system 지시 + prompt → 모델 응답 텍스트. json_mode면 JSON 출력을 강제한다."""
         ...
+
+
+@runtime_checkable
+class UsageAwareGateway(Protocol):
+    """실측 usage까지 노출하는 확장 포트(선택). `CostRouter`가 있으면 근사 대신 실측을 쓴다.
+
+    구현 게이트웨이는 `complete`를 `complete_ex(...).text`로 위임한다(하위호환 — 기존 호출부는
+    여전히 `complete`로 str만 받는다). usage를 못 뽑는 응답이면 `Completion.usage=None`.
+    """
+
+    def complete_ex(self, system: str, prompt: str, *, model: str,
+                    temperature: float = 0.4, json_mode: bool = True) -> Completion:
+        ...
+
+
+def _usage_from(obj, in_attr: str, out_attr: str) -> Usage | None:
+    """provider 응답의 usage 객체에서 (입력, 출력) 토큰을 방어적으로 추출. 없으면 None."""
+    if obj is None:
+        return None
+    inp = getattr(obj, in_attr, None)
+    out = getattr(obj, out_attr, None)
+    if inp is None or out is None:
+        return None
+    try:
+        return Usage(int(inp), int(out))
+    except (TypeError, ValueError):
+        return None
 
 
 class GeminiGateway:
@@ -73,6 +117,11 @@ class GeminiGateway:
 
     def complete(self, system: str, prompt: str, *, model: str,
                  temperature: float = 0.4, json_mode: bool = True) -> str:
+        return self.complete_ex(system, prompt, model=model,
+                                temperature=temperature, json_mode=json_mode).text
+
+    def complete_ex(self, system: str, prompt: str, *, model: str,
+                    temperature: float = 0.4, json_mode: bool = True) -> Completion:
         import google.generativeai as genai  # 선택 의존성: 호출 시점 지연 import
 
         genai.configure(api_key=self._key)
@@ -85,7 +134,11 @@ class GeminiGateway:
             generation_config=generation_config,
         )
         resp = gm.generate_content(prompt)
-        return (getattr(resp, "text", None) or _EMPTY_JSON).strip()
+        text = (getattr(resp, "text", None) or _EMPTY_JSON).strip()
+        # Gemini usage_metadata: prompt_token_count / candidates_token_count
+        usage = _usage_from(getattr(resp, "usage_metadata", None),
+                            "prompt_token_count", "candidates_token_count")
+        return Completion(text=text, usage=usage)
 
 
 class OpenAIGateway:
@@ -111,6 +164,11 @@ class OpenAIGateway:
 
     def complete(self, system: str, prompt: str, *, model: str,
                  temperature: float = 0.4, json_mode: bool = True) -> str:
+        return self.complete_ex(system, prompt, model=model,
+                                temperature=temperature, json_mode=json_mode).text
+
+    def complete_ex(self, system: str, prompt: str, *, model: str,
+                    temperature: float = 0.4, json_mode: bool = True) -> Completion:
         from openai import OpenAI  # 선택 의존성: 호출 시점 지연 import
 
         client = OpenAI(api_key=self._key)
@@ -125,7 +183,11 @@ class OpenAIGateway:
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         resp = client.chat.completions.create(**kwargs)
-        return (resp.choices[0].message.content or _EMPTY_JSON).strip()
+        text = (resp.choices[0].message.content or _EMPTY_JSON).strip()
+        # OpenAI usage: prompt_tokens / completion_tokens
+        usage = _usage_from(getattr(resp, "usage", None),
+                            "prompt_tokens", "completion_tokens")
+        return Completion(text=text, usage=usage)
 
 
 class ClaudeGateway:
@@ -161,6 +223,11 @@ class ClaudeGateway:
 
     def complete(self, system: str, prompt: str, *, model: str,
                  temperature: float = 0.4, json_mode: bool = True) -> str:
+        return self.complete_ex(system, prompt, model=model,
+                                temperature=temperature, json_mode=json_mode).text
+
+    def complete_ex(self, system: str, prompt: str, *, model: str,
+                    temperature: float = 0.4, json_mode: bool = True) -> Completion:
         import anthropic  # 선택 의존성: 호출 시점 지연 import
 
         client = anthropic.Anthropic(
@@ -177,4 +244,6 @@ class ClaudeGateway:
         )
         blocks = getattr(resp, "content", None) or []
         text = "".join(getattr(b, "text", "") for b in blocks)
-        return (text or _EMPTY_JSON).strip()
+        # Anthropic usage: input_tokens / output_tokens
+        usage = _usage_from(getattr(resp, "usage", None), "input_tokens", "output_tokens")
+        return Completion(text=(text or _EMPTY_JSON).strip(), usage=usage)
