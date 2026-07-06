@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 import types
 
-from core.llm import GeminiGateway, LLMGateway, OpenAIGateway
+from core.llm import ClaudeGateway, GeminiGateway, LLMGateway, OpenAIGateway
 
 
 def _install_fake_genai(monkeypatch, *, text: str | None):
@@ -175,3 +175,68 @@ def test_openai_complete_json_mode_false_omits_response_format(monkeypatch):
 def test_openai_complete_empty_falls_back_to_empty_object(monkeypatch):
     _install_fake_openai(monkeypatch, content=None)
     assert OpenAIGateway(api_key="k").complete("S", "P", model="m") == "{}"
+
+
+# ── ClaudeGateway: 프로바이더 #3 — messages API 매핑 ──
+
+def _install_fake_anthropic(monkeypatch, *, text: str | None):
+    """가짜 `anthropic`을 sys.modules에 심고, messages.create 인자를 기록한다."""
+    calls: dict = {}
+
+    class _Block:
+        def __init__(self, t):
+            self.text = t
+
+    class _Resp:
+        def __init__(self, t):
+            self.content = [] if t is None else [_Block(t)]
+
+    class _Messages:
+        def create(self, **kwargs):
+            calls.update(kwargs)
+            return _Resp(text)
+
+    class Anthropic:
+        def __init__(self, *, api_key=None, default_headers=None):
+            calls["api_key"] = api_key
+            calls["default_headers"] = default_headers
+            self.messages = _Messages()
+
+    fake = types.ModuleType("anthropic")
+    fake.Anthropic = Anthropic
+    monkeypatch.setitem(sys.modules, "anthropic", fake)
+    return calls
+
+
+def test_claude_available_reads_env(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert ClaudeGateway().available is False
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    assert ClaudeGateway().available is True
+    assert isinstance(ClaudeGateway(), LLMGateway)
+
+
+def test_claude_complete_maps_port_to_messages(monkeypatch):
+    calls = _install_fake_anthropic(monkeypatch, text='  {"z": 3}\n')
+    out = ClaudeGateway(api_key="kkk").complete(
+        "SYS", "PROMPT", model="claude-x", temperature=0.5, json_mode=False)
+    assert out == '{"z": 3}'                                # strip
+    assert calls["api_key"] == "kkk"
+    assert calls["model"] == "claude-x"
+    assert calls["temperature"] == 0.5
+    assert calls["system"] == "SYS"                         # json_mode=False → 지시 없음
+    assert calls["messages"] == [{"role": "user", "content": "PROMPT"}]
+    assert calls["default_headers"] == {"User-Agent": "mint-agent/1.0"}
+    assert "max_tokens" in calls                            # messages API 필수
+
+
+def test_claude_json_mode_appends_instruction(monkeypatch):
+    calls = _install_fake_anthropic(monkeypatch, text="{}")
+    ClaudeGateway(api_key="k").complete("SYS", "P", model="m", json_mode=True)
+    assert calls["system"].startswith("SYS")
+    assert "JSON" in calls["system"]                        # system에 JSON-only 지시 덧붙임
+
+
+def test_claude_complete_empty_falls_back_to_empty_object(monkeypatch):
+    _install_fake_anthropic(monkeypatch, text=None)
+    assert ClaudeGateway(api_key="k").complete("S", "P", model="m") == "{}"

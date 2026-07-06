@@ -126,3 +126,55 @@ class OpenAIGateway:
             kwargs["response_format"] = {"type": "json_object"}
         resp = client.chat.completions.create(**kwargs)
         return (resp.choices[0].message.content or _EMPTY_JSON).strip()
+
+
+class ClaudeGateway:
+    """`anthropic` 뒤의 LLM seam (프로바이더 #3). SDK import는 `complete` 안에서만 일어난다.
+
+    `Gemini/OpenAIGateway`와 동일한 `LLMGateway` 포트를 구현한다. 매핑 차이:
+      - system은 messages API의 top-level `system` 파라미터로,
+      - json_mode는 Anthropic에 전용 플래그가 없어 **system에 JSON-only 지시를 덧붙여** 강제한다,
+      - messages API는 `max_tokens`가 필수라 기본값을 둔다(호출부는 포트만 보므로 노출 안 함).
+    Windows + 한글 USERPROFILE 환경에서 SDK 기본 헤더의 ASCII 인코딩이 실패하는 문제를 피하려
+    `default_headers`를 ASCII 안전값으로 명시한다(운영 `claude_runner`의 회피책 상속).
+    api_key 미명시 시 호출 시점에 `ANTHROPIC_API_KEY`에서 해석한다(지연 평가).
+
+    이 게이트웨이의 존재로 `core.routing`의 기본 라우트(Opus/Sonnet/Haiku)가 실제 도달 가능한
+    대상을 갖는다 — 복잡도 비용 라우터가 감쌀 프로바이더.
+    """
+
+    _JSON_INSTRUCTION = "\n\n반드시 유효한 JSON 하나만 출력하세요. 다른 텍스트를 덧붙이지 마세요."
+
+    def __init__(self, *, api_key: str | None = None, max_tokens: int = 4096) -> None:
+        self._explicit_key = api_key
+        self._max_tokens = max_tokens
+
+    @property
+    def _key(self) -> str:
+        if self._explicit_key is not None:
+            return self._explicit_key
+        return os.getenv("ANTHROPIC_API_KEY", "")
+
+    @property
+    def available(self) -> bool:
+        return bool(self._key)
+
+    def complete(self, system: str, prompt: str, *, model: str,
+                 temperature: float = 0.4, json_mode: bool = True) -> str:
+        import anthropic  # 선택 의존성: 호출 시점 지연 import
+
+        client = anthropic.Anthropic(
+            api_key=self._key,
+            default_headers={"User-Agent": "mint-agent/1.0"},
+        )
+        sys_prompt = system + self._JSON_INSTRUCTION if json_mode else system
+        resp = client.messages.create(
+            model=model,
+            system=sys_prompt,
+            max_tokens=self._max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        blocks = getattr(resp, "content", None) or []
+        text = "".join(getattr(b, "text", "") for b in blocks)
+        return (text or _EMPTY_JSON).strip()

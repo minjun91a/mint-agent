@@ -37,10 +37,14 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [ ] control `dispatch`(핸들러 주입 — 미이식 pipeline 배선)
 - [ ] 2중 결합 분해 (Discord·YouTube를 어댑터 뒤로)
 
-## ⬜ Phase 2 — 신뢰 레이어 1차
+## 🔄 Phase 2 — 신뢰 레이어 1차 *(착수)*
 
+- [x] **모델 게이트웨이 프로바이더 #3** — `core/llm.py`에 `ClaudeGateway` 추가(지연 anthropic, messages API 매핑, json_mode=system 지시, Windows 한글 헤더 회피 상속). Gemini·OpenAI·Claude가 같은 `complete` 포트 → 비용 라우터 기본 라우트(Opus/Sonnet/Haiku)가 실제 도달 대상을 가짐. (fake anthropic 매핑·strip·빈응답 폴백 테스트)
+- [x] **복잡도 기반 비용 라우터** — `core/routing.py`. **`CostRouter`가 `LLMGateway`를 구현**해 기존 게이트웨이를 감싸는 드롭인(어댑터 코드 0줄 변경으로 라우팅·계측 삽입). 순수 `classify`(키워드·길이·json_mode → 티어+점수+근거) + `estimate_cost`/`DEFAULT_PRICING`(**운영 `claude_runner._PRICING`·`_estimate_cost`에서 상속** — 지어낸 수치 없음, 주입 가능) + `estimate_tokens`(근사, 실측 usage는 아래 과제) + `CallRecord`·`jsonl_sink`(경로·시계 주입)·`aggregate`(비용 리포트). 토이 라우트/가짜 게이트웨이로 **엔진 범용성 증명**(Claude 몰라도 동작). 특성화 32건. 누적 **267 green**
+- [ ] **파이프라인 실배선** — 어댑터 LLM 호출을 `CostRouter(gateway, sink=…)`로 감싸 `model="auto"` 라우팅 적용
+- [ ] **실측 usage 연동** — 게이트웨이 포트가 provider usage(input/output tokens)를 노출 → `estimate_tokens` 근사 대체
 - [ ] eval 하니스 (`compliance_audit_*.jsonl` → 자동 환각/위반 체크)
-- [ ] `core.llm` 게이트웨이 위에 **복잡도 기반 비용 라우터**(Opus/Sonnet/Haiku) + 관측성 래퍼 (seam은 Phase 1에서 확보)
+- [ ] 멀티모델 컨센서스 검증
 - [ ] 관측성 로깅 → README 지표 테이블 실측값 채우기
 - [ ] 발행 전 가드레일 정비
 

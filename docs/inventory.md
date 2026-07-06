@@ -135,7 +135,7 @@ Discord 없이 단발 실행. 엔진/어댑터 호출의 얇은 진입점(라우
 |---|---|---|
 | `AGENT_REGISTRY`(Phase2 정규화 완료, 엔진) | youtube-agent 코드에 동명 파일 **없음**. `agent_perms.py`+`agent_tools.py`가 유사 개념. 실제 `AGENT_REGISTRY.md`는 홈(`~/`)의 **문서**(글로벌 CLAUDE.md가 import) | 🟡 코드≠문서 |
 | `cleanup-execution-log.md`(24+ 환각 로그) | youtube-agent에 **없음**. 실제 대응물은 `logs/compliance_audit_*.jsonl` | 🟡 위치 상이 |
-| `BOT/ALPHA 토큰 라우팅`→비용 라우터 | 별도 라우터 파일 미발견. 모델 선택은 현재 **per-call 플래그**(`--opus`,`--model`)·하드코딩 산재. `claude_runner`가 비용 추정만. **중앙 복잡도 라우터는 Phase 2 명시화 대상** | 🔴 미확인, 검증필요 |
+| `BOT/ALPHA 토큰 라우팅`→비용 라우터 | 별도 라우터 파일 미발견. 모델 선택은 원래 **per-call 플래그**(`--opus`,`--model`)·하드코딩 산재였고 `claude_runner`가 비용 추정만 보유. → **실현: `core/routing.py`**(`CostRouter` = `LLMGateway` 데코레이터; 복잡도 `classify`→티어→모델, 호출별 `CallRecord` 계측). 가격표·비용공식은 `claude_runner._PRICING`/`_estimate_cost`에서 **상속**(지어낸 수치 없음). 파이프라인 실배선·실측 usage는 Phase 2 잔여 | 🟢 실현(Phase 2 착수) |
 | `alpha_review` 핸들러 | `approvals_db.py`의 승인 타입으로 존재 | 🟢 |
 | `manhwa_seo.py` | `agents/manhwa_seo.py` 존재 | 🟢 |
 | 멀티 프로바이더 | Claude(runner/cli) · **Gemini(persona/seo/manhwa_seo/planner/research/gem/control폴백/policy/orchestrator)** · OpenAI(story_writer/tts폴백) · ElevenLabs · FLUX/DALL-E 혼재 | 🟢 → 비용라우팅 설계 시 핵심 |

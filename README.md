@@ -11,8 +11,8 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-143_passing-brightgreen)
-![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI-green)
+![tests](https://img.shields.io/badge/tests-267_passing-brightgreen)
+![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
 
@@ -29,19 +29,22 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **현재 Phase 1(엔진/어댑터 경계 분리) 진행 중 — 특성화 테스트 143개 green.**
+> **현재 Phase 1(엔진/어댑터 경계 분리) 진행 중 — 특성화 테스트 267개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
 
 - **🔌 플랫폼 무관 어댑터 구조 — ✅ 작동** · `core/`는 어댑터 구체 타입을 모른다. 발행 게이트가
   youtube가 *아닌* 가짜 어댑터에도 동작함을 테스트로 증명(adapter-agnostic).
-- **🧩 모델 게이트웨이 — ✅ 작동** · Gemini·OpenAI를 같은 `complete` 포트 뒤로 통합. 프로바이더를
-  늘려도 엔진/어댑터 코드는 **0줄 변경**.
+- **🧩 모델 게이트웨이 — ✅ 작동** · Gemini·OpenAI·Claude를 같은 `complete` 포트 뒤로 통합.
+  프로바이더를 늘려도 엔진/어댑터 코드는 **0줄 변경**.
+- **🧭 복잡도 기반 비용 라우터 — ✅ 엔진 작동** · 요청 복잡도를 추정해 티어(Opus/Sonnet/Haiku)를
+  고르고, 호출마다 (모델·토큰·비용·근거)를 계측한다. 라우터 자신이 게이트웨이 포트를 구현해
+  **기존 게이트웨이를 감싸는 드롭인**이다. *가격표는 운영 코드에서 상속(주입 가능), 실측 usage
+  연동·파이프라인 실배선은 Phase 2.*
 - **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 143 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
-- **🧭 복잡도 기반 비용 라우터 — 🔜 Phase 2** · 게이트웨이 seam 위에 Opus/Sonnet/Haiku 라우팅.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 267 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **📊 멀티모델 컨센서스 검증 · 관측성 로깅 — 🔜 Phase 2** · 응답을 여러 모델로 교차 검증해
   환각을 잡고 교정·기록하는 것이 목표. 검증 규칙은 매일의 코드 검증 훈련([daily-drill](https://github.com/minjun91a/daily-drill))에서
   반복 발견한 *"그럴듯하지만 틀린"* 패턴을 코드화해 채운다 — 현재 3일차(SQL·pandas·Python), 규칙 후보 축적 중.
@@ -65,9 +68,9 @@ flowchart LR
     H --> I
 ```
 
-> **목표 아키텍처(비전).** 복잡도 기반 라우팅(Opus/Sonnet/Haiku)·컨센서스 검증·HITL은
-> Phase 1 후반~Phase 2에서 구현한다 — 현재 구현 상태는 위 **핵심 기능**(✅/🔜)·아래 **로드맵** 참조.
-> 지금 작동하는 엔진/어댑터 포트 구조는 [최소 예제](#-빠른-시작)로 바로 확인할 수 있다.
+> **목표 아키텍처(비전).** **복잡도 기반 라우팅(Opus/Sonnet/Haiku)은 엔진 레벨로 구현됨**
+> (`core/routing.py` — 아래 [라우터 예제](#-빠른-시작)). 컨센서스 검증·Discord HITL 실배선은
+> Phase 2/1 후반 예정 — 현재 구현 상태는 위 **핵심 기능**(✅/🔜)·아래 **로드맵** 참조.
 
 ## 🚀 빠른 시작
 
@@ -79,7 +82,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 143 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 267 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -107,21 +110,45 @@ print(decision.verdict.recommendation)  # "approve" | "review" | "reject"
 > `description`에서 AI 라벨(예: "AI-generated")을 빼면 게이트가 `review`로 바뀌어
 > `proceed=False`(HITL 보류)가 된다 — **Trust ②(사람 승인)를 엔진 레벨에서 강제**한다.
 
+### 복잡도 비용 라우터 — 쉬운 일에 비싼 모델을 쓰지 않는다 (키 불필요)
+
+```python
+from core.routing import CostRouter, aggregate
+
+records = []
+# CostRouter는 LLMGateway를 구현 → 어떤 게이트웨이든 감싸는 드롭인.
+router = CostRouter(any_gateway, sink=records.append)   # any_gateway: Gemini/OpenAI/Claude…
+
+# model="auto"면 복잡도로 티어를 고른다 (호출 없이 미리보기).
+print(router.route_for("", "이 문단을 요약해줘", model="auto")[0])           # → Haiku (저렴)
+print(router.route_for("", "이 아키텍처를 분석·리팩터해줘", model="auto")[0])  # → Opus  (고성능)
+
+# 실제 호출은 감싼 게이트웨이에 위임되고, 매 호출이 비용까지 계측된다.
+router.complete("", "요약해줘", model="auto")
+print(aggregate(records))   # {'calls': 1, 'cost_usd': ..., 'by_tier': {'cheap': {...}}}
+```
+
+> 라우터 자신이 `LLMGateway` 포트라, 어댑터는 `GeminiGateway`를 쓰는지 `CostRouter(GeminiGateway())`를
+> 쓰는지 **모른 채** 동일하게 동작한다 — 라우팅·비용 계측이 코드 변경 0줄로 들어온다.
+
 ## 📂 프로젝트 구조
 
 ```text
 mint-agent/
 ├── core/                   # 플랫폼 무관 엔진
-│   ├── llm.py              # 모델 게이트웨이 (Gemini · OpenAI 프로바이더)
+│   ├── llm.py              # 모델 게이트웨이 (Gemini · OpenAI · Claude 프로바이더)
+│   ├── routing.py          # 복잡도 비용 라우터 (LLMGateway 데코레이터 + 계측)
 │   ├── pipeline.py         # PlatformAdapter 포트 + 발행 게이트 gate()
+│   ├── control.py  persona.py  orchestrator.py   # 라우팅·페르소나·브리핑 메커니즘
 │   ├── memory.py           # 채널 메모리 (경로 주입)
 │   └── trust/verify.py     # 검증 어휘 (Verdict · Violation · Reviewer)
 ├── adapters/
-│   └── youtube/            # produce · review · publish 구현
-│       ├── story_writer.py  seo.py  image_gen.py  captions.py
-│       └── clip_extractor.py  publish.py  review.py  adapter.py
+│   └── youtube/            # produce · review · publish 구현 + 도메인 어휘
+│       ├── story_writer.py  seo.py  image_gen.py  captions.py  tts_engine.py
+│       ├── video_builder.py  thumbnail_gen.py  clip_extractor.py
+│       └── publish.py  review.py  adapter.py  control.py  persona.py  orchestrator.py
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 143 characterization tests
+├── tests/                  # 267 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```
@@ -129,10 +156,11 @@ mint-agent/
 ## 🗺 로드맵
 
 - [x] **Phase 0** — 정리·결정·git 안전망·엔진/어댑터 인벤토리
-- [ ] **Phase 1 — 진행 중 🔄** · 엔진/어댑터 경계 분리: `review`·`produce`(story_writer·seo·
-  image_gen·captions·clip_extractor)·`publish` 이식 + 모델 게이트웨이(Gemini·OpenAI) +
-  `YouTubeAdapter`·발행 게이트 · *남음: tts·video·thumbnail, 엔진 persona/control/orchestrator, Discord 어댑터*
-- [ ] **Phase 2** — 신뢰 레이어 1차: 복잡도 기반 비용 라우터(Opus/Sonnet/Haiku) · eval 하니스 · 관측성
+- [ ] **Phase 1 — 진행 중 🔄** · 엔진/어댑터 경계 분리: `review`·`produce` 전 단계(story_writer·seo·
+  image_gen·captions·clip_extractor·tts·video·thumbnail)·`publish` 이식 + 모델 게이트웨이(Gemini·OpenAI·Claude) +
+  엔진 control/persona/orchestrator + `YouTubeAdapter`·발행 게이트 · *남음: control dispatch, Discord 어댑터*
+- [ ] **Phase 2 — 착수 🔄** · 신뢰 레이어 1차: 복잡도 기반 비용 라우터(Opus/Sonnet/Haiku) **✅ 엔진 구현** ·
+  *남음: 파이프라인 실배선 · 실측 usage 연동 · eval 하니스 · 컨센서스 검증 · 관측성 대시*
 - [ ] **Phase 3** — 2번째 어댑터(research/digest): RAG + pgvector, **엔진 변경 0으로 어댑터 추가** = 추상화 증명
 - [ ] **Phase 4** — 채용용 마감: 아키텍처 다이어그램 · 실측 지표 · 데모
 
