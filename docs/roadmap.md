@@ -50,7 +50,7 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] **eval 하니스** — `core/trust/eval.py`. 발행 게이트 결정 로그(`compliance_audit_*.jsonl`)를 읽어 **집계 지표**(`summarize`: 통과율·권고 분포·점수/위반 통계·채널별)와 **자체 모순 감사**(`check_invariants`: 정답 라벨 없이 게이트가 자기 규칙과 모순되지 않는지 — `reject⟹¬passed`·`approve⟹passed`·`score∈[0,1]`, 원본 compliance 설계 근거)로 변환. 경로 주입(실 로그는 외부), 합성 레코드/임시 파일로 결정적 테스트 17건. 누적 **318 green**. **실 로그 검증(🟢 관측, 2026-07-06)**: 36건 중 pass_rate 2.78%, agreement consensus 15/disagree 21, **모순 7건 검출**(전부 `score_range` — LLM 심층 경로가 점수를 정규화 안 해 score=40 등 스펙[0,1] 위반 → 실 데이터 품질 결함을 하니스가 잡음)
 - [x] **eval 후속 — 게이트 결함 교정** — eval이 검출한 score-range 결함을 `adapters/youtube/review.py` LLM 심층 경로에 **클램프**(score→[0,1]) + recommendation enum 검증(미확인→review 안전화)으로 반영. **원본과 의도적 차이**(원본 미정규화 점수를 계약에 맞게 교정). **find→fix→verify 루프 닫힘**: 교정된 Verdict가 `check_invariants`를 통과하는 테스트로 재확인. 특성화 +4. 누적 **322 green**
 - [ ] eval 후속 — daily-drill 검증규칙 연동(검출 패턴을 trust 규칙 후보로)
-- [ ] 멀티모델 컨센서스 검증 (원본 `agreement` consensus/disagree 신호 활용)
+- [x] **멀티모델 컨센서스 검증** — `core/trust/consensus.py`. 같은 콘텐츠를 N개 리뷰어로 교차검증 → 순수 `combine`(보수적 결합: reject 우선·전원 통과여야 passed·score 최댓값·위반 병합 + `agreement` consensus/disagree) + `run`(리뷰어 thunk 실행, 실패는 보수적 review로 격리). 리뷰어·모델 주입(엔진은 youtube·모델수 무지). **정직성**: 원본 `double_check` 소스가 youtube-agent에 부재 → *이식이 아니라 재구성*(단 `agreement` 의미는 실 로그에서 관측, 보수적 결합은 프로젝트 원칙에서 도출). 특성화 12건. 누적 **334 green**
 - [ ] 관측성 로깅 → README 지표 테이블 실측값 채우기
 - [ ] 발행 전 가드레일 정비
 
