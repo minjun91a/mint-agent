@@ -18,7 +18,8 @@ import json
 import logging
 from typing import Any
 
-from core.llm import GeminiGateway, LLMGateway
+from core.gateway import default_gemini
+from core.llm import LLMGateway
 
 log = logging.getLogger("mint.adapters.youtube.seo")
 
@@ -180,7 +181,7 @@ def generate_seo_meta(script: dict[str, Any],
     category = script.get("category", "") or ""
     fallback = _build_fallback(script, category)
 
-    gw = gateway if gateway is not None else GeminiGateway()
+    gw = gateway if gateway is not None else default_gemini()
 
     # 게이트웨이가 호출 불가(키 없음)면 바로 fallback (원본 동작)
     if not gw.available:

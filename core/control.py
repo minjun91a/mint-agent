@@ -23,7 +23,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
-from core.llm import GeminiGateway, LLMGateway
+from core.gateway import default_gemini
+from core.llm import LLMGateway
 
 log = logging.getLogger("mint.core.control")
 
@@ -82,7 +83,7 @@ class IntentRouter:
 
     def parse_llm(self, text: str) -> Command:
         """LLM 폴백 — 게이트웨이로 intent+args JSON 추출 후 화이트리스트 검증."""
-        gw = self.gateway if self.gateway is not None else GeminiGateway()
+        gw = self.gateway if self.gateway is not None else default_gemini()
         if not gw.available:
             return Command(intent="unknown", source="llm", explain="LLM 게이트웨이 미가용")
         try:

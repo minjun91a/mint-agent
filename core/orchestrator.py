@@ -18,7 +18,8 @@ import json
 import logging
 from typing import Any, Callable
 
-from core.llm import GeminiGateway, LLMGateway
+from core.gateway import default_gemini
+from core.llm import LLMGateway
 
 log = logging.getLogger("mint.core.orchestrator")
 
@@ -47,7 +48,7 @@ def build_briefing(payload: dict, *, system: str, gateway: LLMGateway | None = N
                    model: str = "gemini-2.5-flash", temperature: float = 0.3,
                    intro: str = _DEFAULT_INTRO) -> str:
     """payload(JSON)를 근거로 우선순위 브리핑 생성. 게이트웨이 주입, 미가용/실패 시 안전 메시지."""
-    gw = gateway if gateway is not None else GeminiGateway()
+    gw = gateway if gateway is not None else default_gemini()
     if not gw.available:
         return "❌ LLM 게이트웨이 미가용"
     prompt = intro + f"```json\n{json.dumps(payload, ensure_ascii=False, indent=2, default=str)}\n```"
@@ -62,7 +63,7 @@ def build_briefing(payload: dict, *, system: str, gateway: LLMGateway | None = N
 def answer(question: str, context: dict, *, system: str, gateway: LLMGateway | None = None,
            model: str = "gemini-2.5-flash", temperature: float = 0.4) -> str:
     """context(JSON) 근거 자유 질의 응답. 원본 `answer`의 프롬프트 형식과 동일(순수 조립 + 게이트웨이)."""
-    gw = gateway if gateway is not None else GeminiGateway()
+    gw = gateway if gateway is not None else default_gemini()
     if not gw.available:
         return "❌ LLM 게이트웨이 미가용"
     prompt = (f"# QUESTION\n{question}\n\n"

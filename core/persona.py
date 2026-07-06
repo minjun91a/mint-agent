@@ -20,7 +20,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from core.llm import GeminiGateway, LLMGateway
+from core.gateway import default_gemini
+from core.llm import LLMGateway
 
 log = logging.getLogger("mint.core.persona")
 
@@ -119,7 +120,7 @@ def ask(persona: Persona, channel_id: str | int, user_text: str, *,
                 "claude provider는 agent_runner 주입 필요 (claude_runner 미이식)")
         return agent_runner(persona, channel_id, user_text, extra_context)
 
-    gw = gateway if gateway is not None else GeminiGateway()
+    gw = gateway if gateway is not None else default_gemini()
     if not gw.available:
         return "❌ LLM 게이트웨이 미가용"
 

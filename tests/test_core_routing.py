@@ -27,6 +27,7 @@ from core.routing import (
     classify,
     estimate_cost,
     estimate_tokens,
+    is_priced,
     jsonl_sink,
 )
 
@@ -75,6 +76,12 @@ def test_estimate_cost_unknown_model_uses_fallback_price():
 def test_estimate_cost_pricing_is_injectable():
     assert estimate_cost("toy-deep", 100, 100, pricing=_TOY_PRICING) == pytest.approx(
         (100 * 100.0 + 100 * 200.0) / 1e6)
+
+
+def test_is_priced_flags_table_membership():
+    assert is_priced("claude-opus-4-7") is True            # DEFAULT_PRICING에 있음
+    assert is_priced("gemini-2.5-flash") is False          # 단가 미확보 → 미가격
+    assert is_priced("toy-deep", _TOY_PRICING) is True
 
 
 # ── estimate_tokens: 근사 ────────────────────────────────────────────────────
@@ -210,6 +217,16 @@ def test_router_records_explicit_tier_label():
     assert records[0].reasons == ["explicit-model"]
 
 
+def test_router_unpriced_model_records_none_cost():
+    # 단가표에 없는 모델(예: Gemini)은 비용을 지어내지 않고 None으로 남긴다.
+    records: list[CallRecord] = []
+    router = CostRouter(_FakeGateway(), sink=records.append)   # DEFAULT_PRICING = Claude만
+    router.complete("", "요약해줘", model="gemini-2.5-flash")
+    assert records[0].model == "gemini-2.5-flash"
+    assert records[0].cost_usd is None                        # 미가격
+    assert records[0].in_tokens > 0                           # 토큰·티어는 여전히 계측
+
+
 def test_sink_failure_does_not_break_call():
     def boom(rec):
         raise RuntimeError("sink down")
@@ -253,6 +270,20 @@ def test_aggregate_totals_and_breakdown():
 def test_aggregate_empty():
     rep = aggregate([])
     assert rep["calls"] == 0 and rep["cost_usd"] == 0.0 and rep["by_model"] == {}
+    assert rep["unpriced_calls"] == 0
+
+
+def test_aggregate_skips_unpriced_from_cost():
+    records = [
+        CallRecord("claude-opus-4-7", "deep", 4, 100, 50, 0.02, 0.4, True, []),
+        CallRecord("gemini-2.5-flash", "explicit", 0, 20, 10, None, 0.4, True, []),  # 미가격
+    ]
+    rep = aggregate(records)
+    assert rep["calls"] == 2 and rep["unpriced_calls"] == 1
+    assert rep["cost_usd"] == pytest.approx(0.02)             # 미가격은 총액에서 제외
+    assert rep["in_tokens"] == 120                            # 토큰은 미가격도 합산
+    assert rep["by_model"]["gemini-2.5-flash"]["calls"] == 1
+    assert rep["by_model"]["gemini-2.5-flash"]["cost_usd"] == 0.0
 
 
 # ── 기본 라우트/가격은 출처 붙은(=가격표에 있는) 모델만 가리킨다 ──

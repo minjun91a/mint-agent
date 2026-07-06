@@ -11,7 +11,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-267_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-277_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **현재 Phase 1(엔진/어댑터 경계 분리) 진행 중 — 특성화 테스트 267개 green.**
+> **현재 Phase 1(엔진/어댑터 경계 분리) 진행 중 — 특성화 테스트 277개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -38,13 +38,15 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   youtube가 *아닌* 가짜 어댑터에도 동작함을 테스트로 증명(adapter-agnostic).
 - **🧩 모델 게이트웨이 — ✅ 작동** · Gemini·OpenAI·Claude를 같은 `complete` 포트 뒤로 통합.
   프로바이더를 늘려도 엔진/어댑터 코드는 **0줄 변경**.
-- **🧭 복잡도 기반 비용 라우터 — ✅ 엔진 작동** · 요청 복잡도를 추정해 티어(Opus/Sonnet/Haiku)를
-  고르고, 호출마다 (모델·토큰·비용·근거)를 계측한다. 라우터 자신이 게이트웨이 포트를 구현해
-  **기존 게이트웨이를 감싸는 드롭인**이다. *가격표는 운영 코드에서 상속(주입 가능), 실측 usage
-  연동·파이프라인 실배선은 Phase 2.*
+- **🧭 복잡도 기반 비용 라우터 — ✅ 엔진 작동 + 라이브 경로 관측 배선** · 요청 복잡도를 추정해
+  티어(Opus/Sonnet/Haiku)를 고르고, 호출마다 (모델·토큰·비용·근거)를 계측한다. 라우터 자신이
+  게이트웨이 포트를 구현해 **드롭인**이라, 조립점(`core/gateway.py`)에서 어댑터·엔진의 모든
+  게이트웨이를 감싸 라이브 호출을 계측한다(명시 모델은 안 덮음 = 동작 불변). **비용 정직성**:
+  단가표에 있는 모델만 비용 계상, 미확보 프로바이더(Gemini/OpenAI)는 미가격(None)으로 남긴다 —
+  *지어내지 않는다.* 실단가·실측 usage 연동은 Phase 2 잔여.
 - **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 267 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 277 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **📊 멀티모델 컨센서스 검증 · 관측성 로깅 — 🔜 Phase 2** · 응답을 여러 모델로 교차 검증해
   환각을 잡고 교정·기록하는 것이 목표. 검증 규칙은 매일의 코드 검증 훈련([daily-drill](https://github.com/minjun91a/daily-drill))에서
   반복 발견한 *"그럴듯하지만 틀린"* 패턴을 코드화해 채운다 — 현재 3일차(SQL·pandas·Python), 규칙 후보 축적 중.
@@ -82,7 +84,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 267 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 277 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -138,6 +140,7 @@ mint-agent/
 ├── core/                   # 플랫폼 무관 엔진
 │   ├── llm.py              # 모델 게이트웨이 (Gemini · OpenAI · Claude 프로바이더)
 │   ├── routing.py          # 복잡도 비용 라우터 (LLMGateway 데코레이터 + 계측)
+│   ├── gateway.py          # 게이트웨이 조립점 + 관측 배선 (default_gemini/openai)
 │   ├── pipeline.py         # PlatformAdapter 포트 + 발행 게이트 gate()
 │   ├── control.py  persona.py  orchestrator.py   # 라우팅·페르소나·브리핑 메커니즘
 │   ├── memory.py           # 채널 메모리 (경로 주입)
@@ -148,7 +151,7 @@ mint-agent/
 │       ├── video_builder.py  thumbnail_gen.py  clip_extractor.py
 │       └── publish.py  review.py  adapter.py  control.py  persona.py  orchestrator.py
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 267 characterization tests
+├── tests/                  # 277 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```

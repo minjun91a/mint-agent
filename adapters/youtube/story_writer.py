@@ -23,7 +23,8 @@ from typing import Any, Callable
 
 import yaml
 
-from core.llm import LLMGateway, OpenAIGateway
+from core.gateway import default_openai
+from core.llm import LLMGateway
 
 log = logging.getLogger("mint.adapters.youtube.story_writer")
 
@@ -172,7 +173,7 @@ def write_script(tropes: list[dict[str, Any]], *, model: str = _DEFAULT_MODEL,
     게이트웨이 미가용(키 없음)이면 원본처럼 `RuntimeError`. 결과에 `_used_tropes`를 부착한다.
     (사용이력 파일 기록은 부수효과이므로 분리 — `generate()`가 묶는다.)
     """
-    gw = gateway if gateway is not None else OpenAIGateway()
+    gw = gateway if gateway is not None else default_openai()
     if not gw.available:
         raise RuntimeError("LLM 게이트웨이 미가용 — OPENAI_API_KEY 확인")
 

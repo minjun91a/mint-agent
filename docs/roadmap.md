@@ -41,7 +41,9 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 
 - [x] **모델 게이트웨이 프로바이더 #3** — `core/llm.py`에 `ClaudeGateway` 추가(지연 anthropic, messages API 매핑, json_mode=system 지시, Windows 한글 헤더 회피 상속). Gemini·OpenAI·Claude가 같은 `complete` 포트 → 비용 라우터 기본 라우트(Opus/Sonnet/Haiku)가 실제 도달 대상을 가짐. (fake anthropic 매핑·strip·빈응답 폴백 테스트)
 - [x] **복잡도 기반 비용 라우터** — `core/routing.py`. **`CostRouter`가 `LLMGateway`를 구현**해 기존 게이트웨이를 감싸는 드롭인(어댑터 코드 0줄 변경으로 라우팅·계측 삽입). 순수 `classify`(키워드·길이·json_mode → 티어+점수+근거) + `estimate_cost`/`DEFAULT_PRICING`(**운영 `claude_runner._PRICING`·`_estimate_cost`에서 상속** — 지어낸 수치 없음, 주입 가능) + `estimate_tokens`(근사, 실측 usage는 아래 과제) + `CallRecord`·`jsonl_sink`(경로·시계 주입)·`aggregate`(비용 리포트). 토이 라우트/가짜 게이트웨이로 **엔진 범용성 증명**(Claude 몰라도 동작). 특성화 32건. 누적 **267 green**
-- [ ] **파이프라인 실배선** — 어댑터 LLM 호출을 `CostRouter(gateway, sink=…)`로 감싸 `model="auto"` 라우팅 적용
+- [x] **파이프라인 관측 배선** — `core/gateway.py` 조립점(composition root) 추가. 어댑터·엔진의 7개 게이트웨이 생성점(`else GeminiGateway()/OpenAIGateway()`)을 `default_gemini()/default_openai()`(=`CostRouter` 관측 래핑)으로 교체 → 라이브 경로의 모든 LLM 호출이 토큰·티어·근거로 계측됨. **관측 전용**(명시 모델 안 덮음)이라 기존 동작 불변, 라우팅은 `model="auto"` 옵트인 시만. **비용 정직성**: 단가표에 있는 모델만 비용 계상, Gemini/OpenAI는 미가격(None) — 지어내지 않음(`is_priced`). 특성화 +10. 누적 **277 green**
+- [ ] **Gemini/OpenAI 실단가 확보** → 가격표 주입으로 라이브 경로 비용 켜기(현재 미가격 None)
+- [ ] **auto 라우팅 옵트인 경로** — 가변 복잡도 + 단가 있는(Claude) 호출 경로에 `model="auto"` 적용
 - [ ] **실측 usage 연동** — 게이트웨이 포트가 provider usage(input/output tokens)를 노출 → `estimate_tokens` 근사 대체
 - [ ] eval 하니스 (`compliance_audit_*.jsonl` → 자동 환각/위반 체크)
 - [ ] 멀티모델 컨센서스 검증

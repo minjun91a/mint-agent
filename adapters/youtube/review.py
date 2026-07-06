@@ -19,7 +19,8 @@ import logging
 import re
 from typing import Any
 
-from core.llm import GeminiGateway, LLMGateway
+from core.gateway import default_gemini
+from core.llm import LLMGateway
 from core.trust.verify import Verdict, Violation
 
 log = logging.getLogger("mint.adapters.youtube.review")
@@ -144,7 +145,7 @@ def _llm_deep_check(script: dict[str, Any], seo: dict[str, Any],
     LLM 미가용과 LLM 오류를 구분한다: 전자는 자연스러운 룰 권고를 그대로 두고, 후자는 안전하게
     'review'(사람이 판단)로 강제한다. (원본 동작 보존)
     """
-    gw = gateway if gateway is not None else GeminiGateway()
+    gw = gateway if gateway is not None else default_gemini()
     if not gw.available:
         return _rule_only_verdict(rule_violations)
 

@@ -73,9 +73,18 @@ DEFAULT_ROUTE: dict[Tier, str] = {
 
 def estimate_cost(model: str, in_tokens: int, out_tokens: int, *,
                   pricing: dict[str, dict[str, float]] = DEFAULT_PRICING) -> float:
-    """(입력·출력 토큰, 단가표) → USD 추정. 원본 `_estimate_cost` 공식과 동일."""
+    """(입력·출력 토큰, 단가표) → USD 추정. 원본 `_estimate_cost` 공식과 동일.
+
+    단가표에 없는 모델은 보수적 폴백가를 쓴다(원본 동작). 단 **모델이 실제로 가격되는지**는
+    `is_priced`로 따로 판정한다 — 라우터는 미가격 모델의 비용을 폴백으로 지어내지 않고 비운다.
+    """
     price = pricing.get(model, _FALLBACK_PRICE)
     return (in_tokens * price["in"] + out_tokens * price["out"]) / 1_000_000
+
+
+def is_priced(model: str, pricing: dict[str, dict[str, float]] = DEFAULT_PRICING) -> bool:
+    """이 모델의 **실단가가 표에 있는가**. 없으면 비용을 지어내지 않고 미가격(None)으로 둔다."""
+    return model in pricing
 
 
 def estimate_tokens(text: str) -> int:
@@ -176,7 +185,7 @@ class CallRecord:
     complexity_score: int
     in_tokens: int
     out_tokens: int
-    cost_usd: float
+    cost_usd: float | None            # None = 미가격(단가표에 없는 프로바이더/모델 — 지어내지 않음)
     temperature: float
     json_mode: bool
     reasons: list[str] = field(default_factory=list)
@@ -208,9 +217,14 @@ def jsonl_sink(path: str | Path, *, clock: Callable[[], str]) -> Sink:
 
 
 def aggregate(records: list[CallRecord]) -> dict:
-    """레코드 목록 → 비용 리포트(총합 + 모델별·티어별 분해). 관측성의 payoff."""
+    """레코드 목록 → 비용 리포트(총합 + 모델별·티어별 분해). 관측성의 payoff.
+
+    `cost_usd`는 **가격된 호출만** 합산한다. 미가격(None) 호출은 비용에 넣지 않고
+    `unpriced_calls`로 따로 센다 — 없는 단가를 0이나 폴백으로 채워 총액을 흐리지 않는다.
+    """
     report: dict = {
         "calls": len(records),
+        "unpriced_calls": 0,
         "in_tokens": 0,
         "out_tokens": 0,
         "cost_usd": 0.0,
@@ -220,11 +234,15 @@ def aggregate(records: list[CallRecord]) -> dict:
     for rec in records:
         report["in_tokens"] += rec.in_tokens
         report["out_tokens"] += rec.out_tokens
-        report["cost_usd"] += rec.cost_usd
+        if rec.cost_usd is None:
+            report["unpriced_calls"] += 1
+        else:
+            report["cost_usd"] += rec.cost_usd
         for key, bucket in (("by_model", rec.model), ("by_tier", rec.tier)):
             slot = report[key].setdefault(bucket, {"calls": 0, "cost_usd": 0.0})
             slot["calls"] += 1
-            slot["cost_usd"] += rec.cost_usd
+            if rec.cost_usd is not None:
+                slot["cost_usd"] += rec.cost_usd
     report["cost_usd"] = round(report["cost_usd"], 6)
     for key in ("by_model", "by_tier"):
         for slot in report[key].values():
@@ -285,10 +303,12 @@ class CostRouter:
 
         in_tokens = estimate_tokens(system) + estimate_tokens(prompt)
         out_tokens = estimate_tokens(text)
+        # 단가가 있는 모델만 비용을 매긴다. 없으면 None(미가격) — 폴백가로 지어내지 않는다.
+        cost = (estimate_cost(chosen, in_tokens, out_tokens, pricing=self._pricing)
+                if is_priced(chosen, self._pricing) else None)
         rec = CallRecord(
             model=chosen, tier=tier_label, complexity_score=score,
-            in_tokens=in_tokens, out_tokens=out_tokens,
-            cost_usd=estimate_cost(chosen, in_tokens, out_tokens, pricing=self._pricing),
+            in_tokens=in_tokens, out_tokens=out_tokens, cost_usd=cost,
             temperature=temperature, json_mode=json_mode, reasons=reasons,
         )
         self._emit(rec)
