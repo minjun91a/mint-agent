@@ -205,7 +205,7 @@ def test_synthesize_raises_when_no_openai_voice_for_fallback(tmp_path):
 def test_synthesize_multi_single_speaker_returns_one_timeline(tmp_path):
     engine = TTSEngine(library=_make_lib(tmp_path, rng=random.Random(0)),
                        backends={"elevenlabs": _FakeBackend("elevenlabs")},
-                       provider="elevenlabs", run=_FakeRunner())
+                       provider="elevenlabs", run=_FakeRunner(), ffmpeg="ff")
     path, timeline = engine.synthesize_multi("plain narration", tmp_path / "out.mp3",
                                              return_timeline=True)
     assert path == tmp_path / "out.mp3"
