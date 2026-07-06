@@ -48,7 +48,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [ ] **auto 라우팅 옵트인 경로** — 가변 복잡도 + 단가 있는(Claude) 호출 경로에 `model="auto"` 적용
 - [ ] **실측 usage 연동** — 게이트웨이 포트가 provider usage(input/output tokens)를 노출 → `estimate_tokens` 근사 대체
 - [x] **eval 하니스** — `core/trust/eval.py`. 발행 게이트 결정 로그(`compliance_audit_*.jsonl`)를 읽어 **집계 지표**(`summarize`: 통과율·권고 분포·점수/위반 통계·채널별)와 **자체 모순 감사**(`check_invariants`: 정답 라벨 없이 게이트가 자기 규칙과 모순되지 않는지 — `reject⟹¬passed`·`approve⟹passed`·`score∈[0,1]`, 원본 compliance 설계 근거)로 변환. 경로 주입(실 로그는 외부), 합성 레코드/임시 파일로 결정적 테스트 17건. 누적 **318 green**. **실 로그 검증(🟢 관측, 2026-07-06)**: 36건 중 pass_rate 2.78%, agreement consensus 15/disagree 21, **모순 7건 검출**(전부 `score_range` — LLM 심층 경로가 점수를 정규화 안 해 score=40 등 스펙[0,1] 위반 → 실 데이터 품질 결함을 하니스가 잡음)
-- [ ] eval 후속 — 검출된 score-range 결함을 게이트(compliance) 이식본에 반영(정규화 클램프) + daily-drill 검증규칙 연동
+- [x] **eval 후속 — 게이트 결함 교정** — eval이 검출한 score-range 결함을 `adapters/youtube/review.py` LLM 심층 경로에 **클램프**(score→[0,1]) + recommendation enum 검증(미확인→review 안전화)으로 반영. **원본과 의도적 차이**(원본 미정규화 점수를 계약에 맞게 교정). **find→fix→verify 루프 닫힘**: 교정된 Verdict가 `check_invariants`를 통과하는 테스트로 재확인. 특성화 +4. 누적 **322 green**
+- [ ] eval 후속 — daily-drill 검증규칙 연동(검출 패턴을 trust 규칙 후보로)
 - [ ] 멀티모델 컨센서스 검증 (원본 `agreement` consensus/disagree 신호 활용)
 - [ ] 관측성 로깅 → README 지표 테이블 실측값 채우기
 - [ ] 발행 전 가드레일 정비

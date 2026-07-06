@@ -174,6 +174,43 @@ def test_deep_gateway_error_forces_review():
     assert v.passed is True
 
 
+# ── eval이 검출한 결함 교정 (Verdict 계약 준수) — 원본과 의도적 차이 ──
+
+def test_deep_clamps_out_of_range_llm_score():
+    # eval이 실 로그에서 잡은 결함: LLM이 미정규화 점수(예: 40)를 반환 → 계약[0,1]로 클램프.
+    gw = _FakeGateway(text=json.dumps({"passed": False, "score": 40.0,
+                                       "violations": [], "recommendation": "reject"}))
+    assert review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw).score == 1.0
+
+
+def test_deep_clamps_negative_score():
+    gw = _FakeGateway(text=json.dumps({"passed": True, "score": -3,
+                                       "violations": [], "recommendation": "approve"}))
+    assert review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw).score == 0.0
+
+
+def test_deep_invalid_recommendation_defaults_to_review():
+    gw = _FakeGateway(text=json.dumps({"passed": True, "score": 0.2,
+                                       "violations": [], "recommendation": "block"}))
+    assert review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw).recommendation == "review"
+
+
+def test_fixed_verdict_passes_eval_invariants():
+    # 루프 닫기(find→fix→verify): eval이 잡던 결함(score=40)을 클램프한 뒤, 그 결정은
+    # eval 불변식을 통과한다. eval이 발견 → 이식본 교정 → eval이 재확인.
+    from core.trust.eval import AuditRecord, check_invariants
+
+    gw = _FakeGateway(text=json.dumps({
+        "passed": False, "score": 40.0,
+        "violations": [{"category": "x", "severity": "high", "detail": "y"}],
+        "recommendation": "reject",
+    }))
+    v = review(CLEAN_SCRIPT, CLEAN_SEO, deep=True, gateway=gw)
+    rec = AuditRecord(passed=v.passed, score=v.score,
+                      recommendation=v.recommendation, violation_count=len(v.violations))
+    assert check_invariants([rec]) == []
+
+
 def test_deep_unavailable_gateway_keeps_rule_recommendation():
     # 미가용(키 없음)은 오류와 다르다 — complete를 부르지 않고 룰의 자연 권고를 그대로 둔다.
     gw = _FakeGateway(available=False, raises=AssertionError("complete 호출 금지"))

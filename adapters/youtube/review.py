@@ -179,11 +179,17 @@ def _llm_deep_check(script: dict[str, Any], seo: dict[str, Any],
         for v in (data.get("violations") or [])
     ]
     violations = list(rule_violations) + llm_violations
+    # 원본과 **의도적 차이**: eval 하니스(core/trust/eval)가 실 로그에서 검출한 결함을 교정한다.
+    # 원본 LLM 경로는 미정규화 점수(score=40 등)·미검증 권고를 그대로 통과시켜 Verdict 계약
+    # (score∈[0,1], recommendation∈{approve,review,reject})을 어겼다. 여기서 계약에 맞게
+    # 클램프·검증한다. 미확인 권고는 원본 정신("의심스러우면 review")대로 review로 안전화.
+    raw_score = float(data.get("score", 0.0) or 0.0)
+    raw_rec = str(data.get("recommendation", "review"))
     return Verdict(
         passed=bool(data.get("passed", True)) and not any(v.severity == "high" for v in violations),
-        score=float(data.get("score", 0.0) or 0.0),
+        score=max(0.0, min(1.0, raw_score)),
         violations=violations,
-        recommendation=str(data.get("recommendation", "review")),
+        recommendation=raw_rec if raw_rec in ("approve", "review", "reject") else "review",
     )
 
 
