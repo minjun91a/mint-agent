@@ -99,3 +99,26 @@ def test_audit_demo_closes_the_loop(capsys):
     out = capsys.readouterr().out
     assert "발행 게이트 감사 리포트" in out
     assert "모순 감사" in out
+
+
+def test_audit_demo_shows_which_rules_fired(capsys):
+    """원본 로그로는 답할 수 없던 질문 — '어떤 규칙이 터졌나'."""
+    demo.demo_audit()
+    out = capsys.readouterr().out
+    assert "### 터진 규칙" in out
+    for category in ("ai_labeling", "citation_out_of_range", "missing_sources_section"):
+        assert category in out
+
+
+def test_audit_demo_promotes_only_the_rule_that_stands_alone(capsys):
+    """`citation_out_of_range`만 단독으로 reject를 냈다. 나머지는 업혀 온 규칙이다."""
+    demo.demo_audit()
+    out = capsys.readouterr().out
+    promoted = [l for l in out.splitlines() if "사전 차단 후보" in l]
+    assert len(promoted) == 1 and "citation_out_of_range" in promoted[0]
+    assert "동시발생 ≠ 인과" in out
+
+
+def test_audit_demo_reports_no_float_noise(capsys):
+    demo.demo_audit()
+    assert "0.44999" not in capsys.readouterr().out

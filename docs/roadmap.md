@@ -74,8 +74,22 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] **실측 usage 연동** — `core/llm.py` 하위호환 포트 확장: `complete_ex(...) -> Completion(text, usage)` + `UsageAwareGateway` 프로토콜. 3 게이트웨이가 provider usage 추출(Gemini `usage_metadata`, OpenAI/Claude `usage`), `complete`는 `complete_ex().text`로 위임(기존 호출부 불변). `CostRouter`가 usage-aware 게이트웨이면 **실측 토큰**, 아니면 문자수 근사로 폴백 → `CallRecord.token_source`("measured"|"estimated")로 정직 라벨, `aggregate.measured_calls` 집계. usage 미노출이면 None(안 지어냄). 특성화 +11. 누적 **345 green**
 - [x] **eval 하니스** — `core/trust/eval.py`. 발행 게이트 결정 로그(`compliance_audit_*.jsonl`)를 읽어 **집계 지표**(`summarize`: 통과율·권고 분포·점수/위반 통계·채널별)와 **자체 모순 감사**(`check_invariants`: 정답 라벨 없이 게이트가 자기 규칙과 모순되지 않는지 — `reject⟹¬passed`·`approve⟹passed`·`score∈[0,1]`, 원본 compliance 설계 근거)로 변환. 경로 주입(실 로그는 외부), 합성 레코드/임시 파일로 결정적 테스트 17건. 누적 **318 green**. **실 로그 검증(🟢 관측, 2026-07-06)**: 36건 중 pass_rate 2.78%, agreement consensus 15/disagree 21, **모순 7건 검출**(전부 `score_range` — LLM 심층 경로가 점수를 정규화 안 해 score=40 등 스펙[0,1] 위반 → 실 데이터 품질 결함을 하니스가 잡음)
 - [x] **eval 후속 — 게이트 결함 교정** — eval이 검출한 score-range 결함을 `adapters/youtube/review.py` LLM 심층 경로에 **클램프**(score→[0,1]) + recommendation enum 검증(미확인→review 안전화)으로 반영. **원본과 의도적 차이**(원본 미정규화 점수를 계약에 맞게 교정). **find→fix→verify 루프 닫힘**: 교정된 Verdict가 `check_invariants`를 통과하는 테스트로 재확인. 특성화 +4. 누적 **322 green**
-- [ ] eval 후속 — [[daily-drill]] 검증규칙 연동(검출 패턴을 trust 규칙 후보로).
-      *본 트랙 범위 밖 — mint-agent 완성 후 사용자가 처음부터 끝까지 직접 진행(2026-07-10 결정).*
+- [x] **eval 후속 — 검출 패턴을 규칙 후보로(엔진 절반)** *(2026-07-10)*.
+  **★ 발견한 구멍 ③**: 감사 로그가 위반 **개수만** 남기고 **어떤 규칙이 터졌는지**를 버리고 있었다.
+  🟢 원본 로그 40건 키 전수 집계 = `{ts, channel, title, passed, score, recommendation,
+  agreement, violation_count}` — 카테고리 없음. **우리가 버린 게 아니라 원본도 없었다.** 그래서
+  원본도 이식본도 "가장 많이 터지는 규칙은?"을 로그로 답할 수 없었고, *검출 패턴 → 규칙 후보*가
+  스키마에서 끊겨 있었다. `audit_record`가 `violations`(카테고리·심각도)를 남기게 하고
+  (`detail`은 **의도적 제외** — 콘텐츠 조각이 감사 로그에 남으면 안 된다), `eval.rule_candidates`가
+  반복 패턴을 후보로 올린다. **하위호환**: `violations is None`(미기록) ≠ `()`(위반 없음) —
+  뭉개면 구 로그 40건이 전부 '위반 0건'이 되고 신규 불변식 2개가 40건을 오탐한다(🟢 재검증: 오탐 0).
+  **★ 동시발생 ≠ 인과**: `always_rejected`만 보면 high 위반 옆에 업혀 뜬 med 규칙이 승격 후보로
+  둔갑한다. `solo_count`(그 규칙이 **유일한 위반**이던 결정 수)가 그 구분을 진다 —
+  🟢 데모에서 `citation_out_of_range`만 승격 후보, `no_citation`은 high인데도 관찰(단독 0).
+  후보는 **제안일 뿐 자동 적용하지 않는다.** 특성화 +42. 누적 **641 green**
+- [ ] eval 후속 — [[daily-drill]] 검증규칙 파이프 연결(detection producer 배선).
+      *엔진 쪽은 위에서 완료. 남은 것은 외부 입력 연결뿐 — 본 트랙 범위 밖,
+      mint-agent 완성 후 사용자가 처음부터 끝까지 직접 진행(2026-07-10 결정).*
 - [x] **멀티모델 컨센서스 검증** — `core/trust/consensus.py`. 같은 콘텐츠를 N개 리뷰어로 교차검증 → 순수 `combine`(보수적 결합: reject 우선·전원 통과여야 passed·score 최댓값·위반 병합 + `agreement` consensus/disagree) + `run`(리뷰어 thunk 실행, 실패는 보수적 review로 격리). 리뷰어·모델 주입(엔진은 youtube·모델수 무지). **정직성**: 원본 `double_check` 소스가 youtube-agent에 부재 → *이식이 아니라 재구성*(단 `agreement` 의미는 실 로그에서 관측, 보수적 결합은 프로젝트 원칙에서 도출). 특성화 12건. 누적 **334 green**
 - [x] **관측 대시(리포트 렌더러)** — `core/observability.py`. 계측 데이터를 사람이 읽는 Markdown으로: `render_cost_report`(CallRecord→호출·비용·**실측/근사 비율**·미가격·티어/모델별 표) + `render_gate_report`(AuditRecord→통과율·권고/합의 분포·점수·**모순 건수**) + `dashboard`(묶음). 순수·결정적 테스트 10건. **실 로그 렌더(🟢)**: 게이트 감사 36건 → 통과율 2.8%·reject35/review1·disagree21/consensus15·모순 7건(score_range)까지 legible. 누적 **355 green**
 - [x] **발행 전 가드레일 정비** *(2026-07-10)*. `core/pipeline.py`. 게이트에 세 가지를 더했다.
@@ -91,7 +105,8 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
   않았다.** 보류만 사람에게 올린다. 단일 리뷰어 경로의 `agreement`는 빈 값(없는 신호를 지어내지 않음).
   감사 실패는 게이트를 막지 않는다(관측은 주 경로를 막지 않는다). 특성화 +22. 누적 **588 green**
 
-> **Phase 2 코드 항목 완료.** 남은 것은 외부 입력이 필요한 [[daily-drill]] 검증규칙 파이프뿐.
+> **Phase 2 코드 항목 완료.** 남은 것은 외부 입력이 필요한 [[daily-drill]] 검증규칙 파이프뿐
+> (엔진은 `rule_candidates`로 그 입력을 받을 준비가 끝났다).
 
 ## ✅ Phase 3 — 두 번째 어댑터 (research/digest) *(완료 2026-07-10)*
 

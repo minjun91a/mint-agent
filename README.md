@@ -11,7 +11,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1%2B3_done_|_Phase_2_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-597_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-641_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 597개 green.**
+> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 641개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -79,16 +79,22 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   보수적으로 결합한다. 한 명이라도 거절하면 보류, 갈리면(`disagree`) 사람에게, 리뷰어가 터져도 그 표를
   보수적 `review`로 격리, **빈 리뷰어 목록은 통과시키지 않는다.** 리뷰어는 thunk 주입 — 엔진은 몇 개
   모델이 도는지 모른다. 불일치는 감사 로그에 남아 리포트에 뜬다.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 597 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 641 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🔬 Trust eval 하니스 — ✅ 작동** · 발행 게이트의 실제 결정 로그를 집계 지표 + **자체 모순 감사**로
   변환(`core/trust/eval.py`). 정답 라벨 없이 게이트가 자기 규칙과 모순되는지 검사 — 실 운영 로그에서
   **점수 스펙 위반(score∉[0,1]) 실사례를 검출**했다(LLM 리뷰어의 미정규화 점수).
+- **🧭 규칙 후보 추출 — ✅ 작동** · 반복해서 터지는 위반 카테고리를 규칙 후보로 올린다
+  (`eval.rule_candidates`). 원본 감사 로그는 위반 **개수만** 남기고 어떤 규칙이 터졌는지를 버려서
+  이 질문 자체가 불가능했다 — 로그 스키마부터 고쳤다. **동시발생 ≠ 인과**: 단독으로 뜬 적 없는
+  규칙은 승격 근거가 없다(`solo_count`). 후보는 **제안일 뿐, 적용은 사람이 한다.**
 - **📊 멀티모델 컨센서스 검증 — ✅ 엔진 작동** · 같은 콘텐츠를 N개 리뷰어(모델·규칙)로 교차검증해
   판정을 보수적으로 결합하고, 리뷰어들이 갈리면(`disagree`) 사람 판단으로 돌린다(`core/trust/consensus.py`).
   리뷰어는 주입 — 엔진은 몇 개 모델을 쓰는지 모른다. 발행 게이트에 배선됨(`gate_consensus`).
 - **📈 관측 대시(리포트 렌더러) — ✅ 작동** · 비용·호출 계측과 게이트 감사를 사람이 읽는 Markdown
-  리포트로 렌더링(`core/observability.py`). 실측/근사 비율·미가격·모순 건수를 숨기지 않는다 —
-  실 운영 로그 36건을 통과율·권고분포·모순 7건까지 legible한 리포트로 뽑았다.
+  리포트로 렌더링(`core/observability.py`). 실측/근사 비율·미가격·모순 건수·**카테고리 미기록
+  레코드 수**를 숨기지 않는다 — 🟢 실 운영 로그(2026-07-10 기준 40건)를 통과율 2.5%·권고분포·
+  모순 9건(전부 `score_range`)까지 legible한 리포트로 뽑았다. 그 40건은 카테고리가 없는 구 스키마라
+  리포트가 "어떤 규칙이 터졌는지는 이 로그로 답할 수 없다"고 **말한다** — 없는 표를 지어내지 않는다.
 - **🔗 daily-drill 검증규칙 파이프 — 🔜 Phase 2** · 매일의 코드 검증 훈련([daily-drill](https://github.com/minjun91a/daily-drill))에서
   반복 발견한 *"그럴듯하지만 틀린"* 패턴을 trust 검증 규칙으로 코드화 — 현재 3일차(SQL·pandas·Python), 규칙 후보 축적 중.
 - **💬 Discord IO 경계 분리 — ✅ 채널 정체성 분리** · 채널→역할 매핑을 `adapters/discord/`로 분리
@@ -136,14 +142,16 @@ flowchart LR
     R -->|"review<br/>(불일치 포함)"| H["사람 판단<br/><sub>requires_human</sub>"]
     R -->|"reject"| X["발행 안 함"]
     R -.->|"결정 기록"| A["감사 JSONL"]
-    A --> E["eval<br/><sub>모순 감사</sub>"] --> RP["리포트"]
+    A --> E["eval<br/><sub>모순 감사 · 규칙 후보</sub>"] --> RP["리포트"]
+    RP -.->|"승격/강등 제안"| H
     H -.->|"🔴 미배선"| D["Discord 승인 UI"]
 ```
 
 </details>
 
 > 🟢 **구현됨**: 복잡도 라우팅(`core/routing.py`, 실단가 기준 비용 계상, `auto` 옵트인) ·
-> 컨센서스 게이트(`gate_consensus`) · 감사 로그와 모순 감사 루프 · HITL 분기(`requires_human`).
+> 컨센서스 게이트(`gate_consensus`) · 감사 로그와 모순 감사 루프 · HITL 분기(`requires_human`) ·
+> 규칙 후보 추출(`rule_candidates` — 제안까지, **적용은 사람**).
 > 🔴 **미배선**: Discord 승인 UI(경계는 `adapters/discord/`에 분리돼 있고 봇 런타임 이식은 별도 작업) ·
 > 실 Postgres 왕복. 전체 목록은 [docs/metrics.md](docs/metrics.md#아직-아닌-것-정직-표기).
 
@@ -191,12 +199,45 @@ python demo.py                        # 키·네트워크 없이 실제로 도�
 
  5. 감사 루프 — 게이트 결정 → JSONL → eval 하니스 → 리포트
 ──────────────────────────────────────────────────────────────────
+  게이트 결정 8건을 기록했다: gate_audit.jsonl
+
   ## 발행 게이트 감사 리포트
-  - **결정** 3건 · **통과율** 100.0%
-  - **권고** review=2 · approve=1
+
+  - **결정** 8건 (기간 2026-07-10T09:00:00 ~ 2026-07-10T09:00:00)
+  - **통과율** 50.0%
+  - **권고** reject=4 · review=3 · approve=1
   - **합의** disagree=1
+  - **점수** 평균 0.2 (min 0.0 · max 0.45)
   - **모순 감사** 0건 ✅ 없음
+
+  ### 터진 규칙
+
+  | 규칙 | 심각도 | 결정 수 | 단독 | support |
+  |---|---|---:|---:|---:|
+  | ai_labeling | med | 2 | 2 | 25% |
+  | citation_out_of_range | high | 2 | 2 | 25% |
+  | missing_sources_section | med | 2 | 0 | 25% |
+  | no_citation | high | 2 | 0 | 25% |
+  | unused_source | low | 2 | 0 | 25% |
+
+  ### 규칙 후보 (2회 이상)
+
+  | 규칙 | 결정 수 | 제안 |
+  |---|---:|---|
+  | ai_labeling | 2 | 👀 관찰 |
+  | citation_out_of_range | 2 | 🔺 사전 차단 후보 (단독으로도 reject) |
+  | missing_sources_section | 2 | 👀 관찰 — 항상 다른 규칙과 함께 떴다(동시발생 ≠ 인과) |
+  | no_citation | 2 | 👀 관찰 — 항상 다른 규칙과 함께 떴다(동시발생 ≠ 인과) |
+  | unused_source | 2 | 👀 관찰 — 항상 다른 규칙과 함께 떴다(동시발생 ≠ 인과) |
+
+  > '단독'은 그 규칙이 **유일한 위반**이었던 결정 수다. 0이면 항상 다른 규칙에
+  > 업혀 뜬 것이므로 승격 근거가 없다. 제안일 뿐 자동 적용하지 않는다 —
+  > 규칙을 바꾸는 것은 사람의 몫이다.
 ```
+
+> `no_citation`은 **high 위반인데도** 승격 후보가 아니다 — 단독으로 뜬 적이 없다. 빈도만 보면
+> `citation_out_of_range`와 똑같아 보이지만, 그 reject를 낸 게 자기라는 근거가 없다.
+> **동시발생은 인과가 아니다.**
 
 </details>
 
@@ -205,7 +246,7 @@ python demo.py                        # 키·네트워크 없이 실제로 도�
 > 이 출력은 CI가 매번 검증한다([tests/test_demo.py](tests/test_demo.py)).
 
 ```bash
-# 특성화 테스트 (이식 동일성 보증) — 597 green, CI에서도 동일 실행
+# 특성화 테스트 (이식 동일성 보증) — 641 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -287,7 +328,7 @@ mint-agent/
 │   │   └── _http.py  search.py  fetch.py  summarize.py  rag.py  review.py  publish.py  adapter.py
 │   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
 ├── docs/                   # roadmap · metrics · inventory · ADR · 개발 블로그
-├── tests/                  # 597 characterization tests
+├── tests/                  # 641 characterization tests
 ├── demo.py                 # 키 없이 도는 데모 진입점
 ├── pyproject.toml
 └── LICENSE                 # MIT

@@ -22,6 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from adapters.research.adapter import ResearchAdapter
 from adapters.research.review import CitationReviewer
 from adapters.youtube.adapter import YouTubeAdapter
 from core.gateway import default_claude, default_gemini
@@ -150,27 +151,42 @@ def demo_consensus() -> None:
 def demo_audit() -> None:
     _title(5, "감사 루프 — 게이트 결정 → JSONL → eval 하니스 → 리포트")
 
-    adapter = YouTubeAdapter(review_deep=False)
+    youtube = YouTubeAdapter(review_deep=False)
+    research = ResearchAdapter(review_deep=False)   # 조립만 — produce/publish는 부르지 않는다
     script = {"title": "T", "body": "b"}
+    hits = [{"title": "T1", "url": "https://a.com/1", "fetched_chars": 5231},
+            {"title": "T2", "url": "https://b.com/2", "fetched_chars": 4102}]
+    sources = "\n\n## 출처\n1. T1\n2. T2"
+    bad_citation = {"query": "q", "hits": hits,
+                    "summary": "- A [출처 1]\n- B [출처 2]\n- C [출처 7]" + sources}
+    no_citation = {"query": "q", "hits": hits, "summary": "그냥 단언합니다."}
 
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "gate_audit.jsonl"
         sink = jsonl_audit_sink(path, clock=lambda: CLOCK)
 
-        gate(adapter, script, {"description": "AI-generated assets used."},
+        gate(youtube, script, {"description": "AI-generated assets used."},
              sink=sink, channel="youtube", title="라벨 있음")
-        gate(adapter, script, {"description": "no disclosure"},
-             sink=sink, channel="youtube", title="라벨 없음")
+        for _ in range(2):
+            gate(youtube, script, {"description": "no disclosure"},
+                 sink=sink, channel="youtube", title="라벨 없음")
+        for _ in range(2):
+            gate(research, bad_citation, sink=sink, channel="research", title="없는 출처 인용")
+        for _ in range(2):
+            gate(research, no_citation, sink=sink, channel="research", title="인용 없음")
         gate_consensus([lambda: Verdict(True, 0.0, recommendation="approve"),
                         lambda: Verdict(True, 0.1, recommendation="review")],
                        sink=sink, channel="research", title="리뷰어 불일치")
 
-        print(f"  게이트 결정 3건을 기록했다: {path.name}\n")
+        records = load_jsonl(path)
+        print(f"  게이트 결정 {len(records)}건을 기록했다: {path.name}\n")
         print("\n".join("  " + l for l in
-                        render_gate_report(load_jsonl(path)).splitlines()))
+                        render_gate_report(records, min_count=2).splitlines()))
 
     print("\n  우리 게이트가 남긴 로그를 우리 eval 하니스가 그대로 읽는다.")
     print("  '모순 감사'는 정답 라벨 없이 게이트가 자기 규칙과 어긋나는지 본다.")
+    print("  원본 로그는 위반 '개수'만 남겨서 어떤 규칙이 터졌는지 물을 수 없었다.")
+    print("  이제 물을 수 있다 — 단, 함께 뜬 규칙을 승격 후보로 착각하지 않는다(단독 열).")
 
 
 DEMOS = {

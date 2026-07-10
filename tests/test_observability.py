@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from core.observability import dashboard, render_cost_report, render_gate_report
 from core.routing import CallRecord
-from core.trust.eval import AuditRecord
+from core.trust.eval import AuditRecord, ViolationRecord
 
 
 def _call(model="claude-opus-4-7", tier="deep", cost=0.02, src="measured",
@@ -71,6 +71,12 @@ def test_gate_report_pass_rate_and_distributions():
     assert "consensus=1" in md and "disagree=1" in md
 
 
+def test_gate_report_trims_float_noise_in_score_range():
+    """min/max는 원시값이라 0.44999999999999996처럼 뜬다 — 리포트에 잡음을 흘리지 않는다."""
+    md = render_gate_report([_audit(score=0.15 * 3), _audit(score=0.0)])
+    assert "max 0.45" in md and "0.4499" not in md
+
+
 def test_gate_report_flags_invariant_findings():
     # reject인데 passed=true → 모순 1건이 리포트에 ⚠️로 뜬다
     md = render_gate_report([_audit(recommendation="reject", passed=True)])
@@ -81,6 +87,88 @@ def test_gate_report_flags_invariant_findings():
 def test_gate_report_clean_shows_no_findings():
     md = render_gate_report([_audit(recommendation="approve", passed=True)])
     assert "모순 감사** 0건" in md and "✅ 없음" in md
+
+
+# ── render_gate_report: 터진 규칙 · 규칙 후보 ──
+
+def _vaudit(categories, **kw) -> AuditRecord:
+    vs = tuple(ViolationRecord(c, s) for c, s in categories)
+    return _audit(violations=vs, violation_count=len(vs), **kw)
+
+
+def test_gate_report_says_categories_unrecorded_for_old_schema():
+    """구 로그만 있으면 '규칙 표'를 지어내지 말고 답할 수 없다고 말한다."""
+    md = render_gate_report([_audit(violation_count=6)])
+    assert "카테고리를 기록한 레코드가 없다" in md
+    assert "### 터진 규칙" not in md
+
+
+def test_gate_report_lists_fired_rules_with_severity():
+    md = render_gate_report([_vaudit([("ai_labeling", "med"), ("banned_phrase", "high")])])
+    assert "### 터진 규칙" in md
+    assert "| ai_labeling | med | 1 | 0 | 100% |" in md      # 함께 떴다 → 단독 0
+    assert "| banned_phrase | high | 1 | 0 | 100% |" in md
+
+
+def test_gate_report_shows_severity_even_below_candidate_threshold():
+    """후보에 못 든 규칙도 심각도는 안다 — '—'로 적으면 아는 것을 모른다고 적는 것이다."""
+    md = render_gate_report([_vaudit([("rare", "high")])], min_count=3)
+    assert "| rare | high | 1 | 1 | 100% |" in md
+    assert "3회 이상 반복된 규칙 없음" in md
+
+
+def test_gate_report_declares_mixed_schema_denominator():
+    md = render_gate_report([_vaudit([("x", "low")]), _audit(violation_count=4)])
+    assert "2건 중 **1건**만 카테고리를 기록했다" in md
+    assert "| x | low | 1 | 1 | 100% |" in md      # 분모는 1(기록된 것만)
+
+
+def test_gate_report_no_violations_is_not_unrecorded():
+    md = render_gate_report([_vaudit([])])
+    assert "1건 모두 무위반" in md
+    assert "카테고리를 기록한 레코드가 없다" not in md
+
+
+def test_gate_report_promotes_rule_that_rejects_on_its_own():
+    recs = [_vaudit([("hallucinated_citation", "high")],
+                    passed=False, recommendation="reject") for _ in range(3)]
+    md = render_gate_report(recs)
+    assert "### 규칙 후보 (3회 이상)" in md
+    assert "사전 차단 후보" in md
+    assert "자동 적용하지 않는다" in md          # 제안일 뿐임을 리포트가 말한다
+
+
+def test_gate_report_does_not_promote_a_rule_that_only_rode_along():
+    """항상 reject와 함께 떴지만 단독으론 한 번도 안 뜬 규칙 → 승격이 아니라 관찰."""
+    recs = [_vaudit([("high_one", "high"), ("tagalong", "med")],
+                    passed=False, recommendation="reject") for _ in range(3)]
+    md = render_gate_report(recs)
+    note = "👀 관찰 — 항상 다른 규칙과 함께 떴다(동시발생 ≠ 인과)"
+    assert f"| tagalong | 3 | {note} |" in md
+    assert f"| high_one | 3 | {note} |" in md
+    assert "사전 차단 후보" not in md
+
+
+def test_gate_report_demotes_never_blocking_rule():
+    recs = [_vaudit([("nit", "low")], passed=True, recommendation="approve") for _ in range(3)]
+    assert "소음 후보" in render_gate_report(recs)
+
+
+def test_gate_report_observes_mixed_rule():
+    recs = [_vaudit([("x", "med")], passed=True, recommendation="approve"),
+            _vaudit([("x", "med")], passed=False, recommendation="reject"),
+            _vaudit([("x", "med")], passed=True, recommendation="review")]
+    md = render_gate_report(recs)
+    assert "| x | 3 | 👀 관찰 |" in md
+    assert "동시발생" not in md         # 단독으로 떴다 — 업힌 게 아니다
+
+
+def test_gate_report_never_claims_decisions_split_when_they_did_not():
+    """전부 review인 규칙은 '결정이 갈림'이 아니다 — 없는 이유를 붙이지 않는다."""
+    recs = [_vaudit([("x", "med")], passed=True, recommendation="review") for _ in range(3)]
+    md = render_gate_report(recs)
+    assert "| x | 3 | 👀 관찰 |" in md
+    assert "갈림" not in md
 
 
 # ── dashboard ──

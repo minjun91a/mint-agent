@@ -24,7 +24,8 @@ core.pipeline — 플랫폼 어댑터의 produce → review → publish 계약 +
   1. **감사 로그** — 결정을 `AuditRecord` 호환 dict로 남긴다(`sink` 주입). 그전까지 게이트는
      아무 기록도 남기지 않았고, 그래서 `core.trust.eval`은 *원본 운영 로그*만 감사할 수 있었다.
      **우리가 만든 게이트는 감사 대상이 아니었다.** 이제 gate → jsonl → `eval.evaluate` →
-     `observability.render_gate_report`로 루프가 닫힌다.
+     `observability.render_gate_report`로 루프가 닫힌다. 레코드는 위반 **카테고리**까지 남긴다
+     (원본은 개수만 남겨서 "어떤 규칙이 터졌나"를 물을 수 없었다 — `audit_record` 참조).
   2. **HITL 지점 명시** — `requires_human`이 "사람이 봐야 한다"를 1급으로 표현한다.
      `proceed=False`만으로는 *거절*과 *보류*가 구분되지 않는다.
   3. **컨센서스 배선** — `gate_consensus`가 N개 리뷰어를 교차검증해 보수적으로 결합한다.
@@ -90,6 +91,11 @@ def audit_record(decision: GateDecision, *, ts: str = "",
 
     필드는 `AuditRecord.from_dict`가 읽는 것과 정확히 짝을 이룬다 — 그래야 우리가 남긴 로그를
     우리 eval 하니스가 그대로 감사할 수 있다(모순 감사 포함).
+
+    **`violations`는 카테고리·심각도만 남긴다.** 원본 로그는 `violation_count`만 남겨서
+    "어떤 규칙이 터졌나"를 영영 물을 수 없었다(로그 40건 전수 확인). 이제 물을 수 있다.
+    `detail`은 제외한다 — 위반 상세는 콘텐츠 조각을 담을 수 있고, 감사 로그는 콘텐츠 보관소가
+    아니다. 규칙 후보 추출에 필요한 것은 *무엇이 몇 번 터졌나*이지 본문이 아니다.
     """
     v = decision.verdict
     return {
@@ -101,6 +107,7 @@ def audit_record(decision: GateDecision, *, ts: str = "",
         "recommendation": v.recommendation,
         "agreement": decision.agreement,
         "violation_count": len(v.violations),
+        "violations": [{"category": x.category, "severity": x.severity} for x in v.violations],
     }
 
 

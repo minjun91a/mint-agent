@@ -94,12 +94,38 @@ def test_audit_record_maps_verdict_fields():
 
     assert row == {"ts": "T", "channel": "ch", "title": "t", "passed": False,
                    "score": 0.45, "recommendation": "reject", "agreement": "",
-                   "violation_count": 2}
+                   "violation_count": 2,
+                   "violations": [{"category": "x", "severity": "high"},
+                                  {"category": "y", "severity": "low"}]}
 
 
 def test_audit_record_carries_agreement_from_consensus():
     d = GateDecision(proceed=False, verdict=_verdict("review"), agreement="disagree")
     assert audit_record(d)["agreement"] == "disagree"
+
+
+def test_audit_record_records_which_rules_fired_not_just_how_many():
+    """원본 로그는 `violation_count`만 남겨 '어떤 규칙이 터졌나'를 물을 수 없었다."""
+    d = GateDecision(proceed=False, verdict=_verdict(
+        "review", violations=[Violation("ai_labeling", "med", detail="설명에 AI 고지 없음")]))
+    row = audit_record(d)
+    assert [v["category"] for v in row["violations"]] == ["ai_labeling"]
+
+
+def test_audit_record_omits_violation_detail():
+    """`detail`은 콘텐츠 조각을 담을 수 있다 — 감사 로그는 콘텐츠 보관소가 아니다."""
+    secret = "본문에 있던 금지표현 원문"
+    d = GateDecision(proceed=False, verdict=_verdict(
+        "reject", violations=[Violation("banned_phrase", "high", detail=secret)]))
+    row = audit_record(d)
+    assert row["violations"] == [{"category": "banned_phrase", "severity": "high"}]
+    assert secret not in json.dumps(row, ensure_ascii=False)
+
+
+def test_audit_record_empty_violations_is_empty_list_not_missing():
+    """위반 없음(`[]`)과 미기록(키 부재)은 다르다 — 우리 게이트는 항상 기록한다."""
+    row = audit_record(GateDecision(proceed=True, verdict=_verdict("approve")))
+    assert row["violations"] == [] and row["violation_count"] == 0
 
 
 # ── 감사 로그 sink ──────────────────────────────────────────────────
@@ -251,3 +277,29 @@ def test_single_reviewer_gate_leaves_agreement_blank(tmp_path: Path):
     row = json.loads(path.read_text(encoding="utf-8").strip())
     assert row["agreement"] == ""
     assert evaluate(load_jsonl(path))["summary"]["by_agreement"] == {}
+
+
+def test_gate_log_feeds_rule_candidates_end_to_end(tmp_path: Path):
+    """gate → JSONL → eval → **규칙 후보**. 원본 로그로는 불가능했던 관통 경로.
+
+    `violation_count`만 남기던 시절엔 'ai_labeling이 3번 터졌다'를 로그가 말할 수 없었다.
+    """
+    path = tmp_path / "gate_audit.jsonl"
+    sink = jsonl_audit_sink(path, clock=CLOCK)
+    missing_label = _verdict("reject", passed=False, score=0.45,
+                             violations=[Violation("ai_labeling", "high", detail="본문 원문")])
+
+    for _ in range(3):
+        gate(_StubAdapter(missing_label), {}, sink=sink, channel="youtube")
+    gate(_StubAdapter(_verdict("approve", passed=True)), {}, sink=sink, channel="youtube")
+
+    out = evaluate(load_jsonl(path))
+    assert out["summary"]["categorized_count"] == 4        # 우리 게이트는 항상 카테고리를 남긴다
+    assert out["summary"]["by_category"] == {"ai_labeling": 3}
+    assert out["invariant_findings"] == []
+
+    (candidate,) = out["rule_candidates"]
+    assert candidate.category == "ai_labeling"
+    assert candidate.count == 3 and candidate.support == 0.75
+    assert candidate.action == "promote"                   # 등장하면 항상 reject였다
+    assert "본문 원문" not in path.read_text(encoding="utf-8")   # detail은 로그에 없다
