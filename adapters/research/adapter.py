@@ -8,7 +8,7 @@ YouTube 어댑터와 도메인이 전혀 다름에도 엔진 코드가 한 줄�
 현재:
   - produce: ✅ 검색 → 본문 페치 → 출처 인용 요약(원본 `run_research` 동작)
   - review : ✅ 출처 인용 검증(`CitationReviewer` → `core.trust.Verdict`)
-  - publish: ⬜ 예정 — 백엔드 주입(youtube publish와 같은 패턴)
+  - publish: ✅ 마크다운 다이제스트 발행(`ResearchPublisher` + `DigestSink` 주입)
 
 주입 지점은 둘: HTTP(`fetch`)와 LLM(`gateway`). 둘 다 기본값이 실 구현이라 운영은 무설정으로
 돌고, 테스트는 가짜를 넣어 네트워크·모델 없이 결정적으로 돈다.
@@ -23,6 +23,7 @@ from typing import Any
 
 from adapters.research._http import HttpFetcher, urllib_fetch
 from adapters.research.fetch import fetch_text
+from adapters.research.publish import ResearchPublisher
 from adapters.research.review import CitationReviewer
 from adapters.research.search import search
 from adapters.research.summarize import _DEFAULT_MODEL, summarize
@@ -39,12 +40,14 @@ class ResearchAdapter:
                  gateway: LLMGateway | None = None,
                  fetch: HttpFetcher = urllib_fetch,
                  review_deep: bool = True,
-                 reviewer: CitationReviewer | None = None) -> None:
+                 reviewer: CitationReviewer | None = None,
+                 publisher: ResearchPublisher | None = None) -> None:
         self._top_k = top_k
         self._model = model
         self._gateway = gateway
         self._fetch = fetch
         self._reviewer = reviewer or CitationReviewer(deep=review_deep, gateway=gateway)
+        self._publisher = publisher
 
     def produce(self, brief: str) -> dict[str, Any]:
         """질의(brief) → 리서치 다이제스트. 검색 결과가 없으면 사유를 담아 빈 결과를 돌려준다."""
@@ -69,7 +72,14 @@ class ResearchAdapter:
         """다이제스트 → 출처 인용 검증 Verdict. `context={"bodies": [...]}`면 근거 대조까지."""
         return self._reviewer.review(content, context)
 
-    def publish(self, asset: Any) -> Any:
-        raise NotImplementedError(
-            "research publish 백엔드 미배선 — 다이제스트 발행 백엔드를 주입하라"
-        )
+    def publish(self, asset: dict[str, Any]) -> dict[str, Any]:
+        """다이제스트 → 발행. publisher 미주입 시 명시적 에러.
+
+        발행은 되돌리기 어려운 외부 행위다. 기본 sink를 몰래 만들지 않고 **명시적 배선을 요구**한다
+        (youtube publish와 같은 규약).
+        """
+        if self._publisher is None:
+            raise NotImplementedError(
+                "research publish 백엔드 미배선 — ResearchPublisher(DigestSink)를 주입하라"
+            )
+        return self._publisher.publish(asset)

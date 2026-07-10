@@ -10,10 +10,13 @@ adapters.research.adapter 특성화 테스트 — **두 번째 어댑터**.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from adapters.research._http import HttpResponse
 from adapters.research.adapter import NO_HITS, ResearchAdapter
+from adapters.research.publish import FileDigestSink, ResearchPublisher
 from adapters.research.search import build_search_url
 from core.pipeline import GateDecision, PlatformAdapter, gate
 from core.trust.verify import Verdict
@@ -71,8 +74,57 @@ def test_research_adapter_satisfies_platform_adapter_port():
 
 
 def test_publish_requires_backend_injection():
+    """발행은 되돌리기 어려운 외부 행위 — 기본 sink를 몰래 만들지 않는다."""
     with pytest.raises(NotImplementedError, match="백엔드"):
         ResearchAdapter().publish({})
+
+
+def test_publish_delegates_to_injected_publisher(tmp_path):
+    adapter = ResearchAdapter(
+        publisher=ResearchPublisher(FileDigestSink(tmp_path), clock=lambda: "2026-07-10T00:00:00"))
+    digest = {"query": "q", "summary": "- A [출처 1]", "hits": []}
+
+    out = adapter.publish(digest)
+    assert Path(out["location"]).exists()
+
+
+# ── 3단 계약 관통: produce → gate → publish ────────────────────────
+
+
+def test_produce_gate_publish_roundtrip(tmp_path):
+    """엔진 게이트가 통과시킨 다이제스트만 발행된다 — PlatformAdapter 3단이 실제로 이어진다."""
+    body = "<p>" + "본문" * 10 + "</p>"
+    fetcher = _FakeFetcher(_pages(a=body, b=body))
+    summary = ("- 사실 A [출처 1]\n- 사실 B [출처 2]\n\n"
+               "## 출처\n1. Title 1 — https://a.com/1\n2. Title 2 — https://b.com/2")
+    adapter = ResearchAdapter(
+        gateway=_FakeGateway(summary), fetch=fetcher, review_deep=False,
+        publisher=ResearchPublisher(FileDigestSink(tmp_path), clock=lambda: "2026-07-10T00:00:00"))
+
+    digest = adapter.produce(QUERY)
+    decision = gate(adapter, digest)
+    assert decision.proceed is True
+
+    out = adapter.publish(digest)
+    doc = Path(out["location"]).read_text(encoding="utf-8")
+    assert "사실 A [출처 1]" in doc
+    assert out["fetched"] == 2
+
+
+def test_gate_blocks_publish_on_hallucinated_citation(tmp_path):
+    """요약이 없는 출처를 인용하면 게이트가 막고, 발행은 일어나지 않는다."""
+    fetcher = _FakeFetcher(_pages(a="<p>본문</p>", b="<p>본문</p>"))
+    adapter = ResearchAdapter(
+        gateway=_FakeGateway("- 사실 [출처 9]\n\n## 출처\n1. Title 1"),
+        fetch=fetcher, review_deep=False,
+        publisher=ResearchPublisher(FileDigestSink(tmp_path), clock=lambda: "2026-07-10T00:00:00"))
+
+    digest = adapter.produce(QUERY)
+    decision = gate(adapter, digest)
+
+    assert decision.proceed is False
+    assert decision.verdict.recommendation == "reject"
+    assert list(tmp_path.glob("*.md")) == []   # 발행되지 않았다
 
 
 def test_engine_gate_drives_research_adapter():

@@ -89,7 +89,15 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
   (결과 어휘만 공유하는 얕은 설계가 옳았음을 2번째 어댑터가 검증). **정제의 파장**: `context`가 optional이 되자
   `gate(adapter, content)`가 가능해졌고 youtube가 `None.get`으로 깨졌다 → 어댑터에서 `seo or {}` 방어 + 회귀 테스트.
   특성화 +34. 누적 **447 green**
-- [ ] **`publish`** — 다이제스트 발행 백엔드 주입(youtube publish와 같은 패턴)
+- [x] **`publish`** — `adapters/research/publish.py`. youtube publish와 같은 두 층 분리:
+  순수 렌더(`slugify`·`build_meta`·`render_digest`) + `DigestSink` **백엔드 주입**(`FileDigestSink`는
+  경로 주입, 시계 주입으로 결정적). **원본에 발행 단계 없음 → 신규 구축**. **정직성 두 가지**:
+  ① 발행물이 **페치 실패를 숨기지 않는다**(수집 정보 표에 "❌ 페치 실패" — `review`의
+  `citation_unfetched_source`가 보는 것과 같은 신호). ② **덮어쓰기 안전** — 발행은 되돌리기 어려운
+  외부 행위라 기본적으로 덮어쓰지 않고 `-2`·`-3` 접미사를 붙이며, 어댑터는 기본 sink를 몰래 만들지 않고
+  **명시적 배선을 요구**한다. **3단 계약 관통 테스트**: `produce → gate → publish`에서 게이트가
+  통과시킨 다이제스트만 발행되고, 환각 인용(`[출처 9]`)이면 파일이 생기지 않음을 고정. 특성화 +24.
+  누적 **471 green**
 - [ ] pgvector 도입 (RAG)
 - [ ] **엔진 변경 0으로 어댑터 추가** = 추상화 증명 *(produce 구간 달성 · review/publish 남음)*
 
