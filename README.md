@@ -11,7 +11,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1%2B3_done_|_Phase_2_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-566_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-588_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 566개 green.**
+> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 588개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -71,15 +71,21 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   기준 `$3.00 → $1.00`). ② 조립점의 세 팩토리가 전부 **Claude 라우트**를 쓰고 있어, `auto`를 켜는
   순간 `default_gemini()`가 Claude 모델명을 Gemini SDK로 넘겼다. 관측 전용이라 아무도 `auto`를
   안 써서 잠들어 있던 버그다. 둘 다 재현 → 교정 → 회귀 테스트로 고정.
-- **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
-  사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 566 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 작동** · `approve`만 통과. **거절과 보류는 다르다** —
+  `requires_human`(보류)과 `rejected`를 구분해, 사람을 부를 것만 사람에게 올린다. 게이트 결정은
+  `AuditRecord` 호환 JSONL로 남고, **그 로그를 우리 eval 하니스가 그대로 읽는다**(🟢 gate → jsonl →
+  eval → 리포트 관통 확인). 감사 기록 실패는 발행 판단을 막지 않는다.
+- **🤝 컨센서스 발행 게이트 — ✅ 배선됨** · `gate_consensus(reviewers)`가 N개 리뷰어를 교차검증해
+  보수적으로 결합한다. 한 명이라도 거절하면 보류, 갈리면(`disagree`) 사람에게, 리뷰어가 터져도 그 표를
+  보수적 `review`로 격리, **빈 리뷰어 목록은 통과시키지 않는다.** 리뷰어는 thunk 주입 — 엔진은 몇 개
+  모델이 도는지 모른다. 불일치는 감사 로그에 남아 리포트에 뜬다.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 588 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🔬 Trust eval 하니스 — ✅ 작동** · 발행 게이트의 실제 결정 로그를 집계 지표 + **자체 모순 감사**로
   변환(`core/trust/eval.py`). 정답 라벨 없이 게이트가 자기 규칙과 모순되는지 검사 — 실 운영 로그에서
   **점수 스펙 위반(score∉[0,1]) 실사례를 검출**했다(LLM 리뷰어의 미정규화 점수).
 - **📊 멀티모델 컨센서스 검증 — ✅ 엔진 작동** · 같은 콘텐츠를 N개 리뷰어(모델·규칙)로 교차검증해
   판정을 보수적으로 결합하고, 리뷰어들이 갈리면(`disagree`) 사람 판단으로 돌린다(`core/trust/consensus.py`).
-  리뷰어는 주입 — 엔진은 몇 개 모델을 쓰는지 모른다. *실 다중 모델 배선·관측 대시는 Phase 2 잔여.*
+  리뷰어는 주입 — 엔진은 몇 개 모델을 쓰는지 모른다. 발행 게이트에 배선됨(`gate_consensus`).
 - **📈 관측 대시(리포트 렌더러) — ✅ 작동** · 비용·호출 계측과 게이트 감사를 사람이 읽는 Markdown
   리포트로 렌더링(`core/observability.py`). 실측/근사 비율·미가격·모순 건수를 숨기지 않는다 —
   실 운영 로그 36건을 통과율·권고분포·모순 7건까지 legible한 리포트로 뽑았다.
@@ -107,9 +113,10 @@ flowchart LR
     H --> I
 ```
 
-> **목표 아키텍처(비전).** **복잡도 기반 라우팅(Opus/Sonnet/Haiku)은 엔진 레벨로 구현됨**
-> (`core/routing.py` — 아래 [라우터 예제](#-빠른-시작)). 컨센서스 검증·Discord HITL 실배선은
-> Phase 2/1 후반 예정 — 현재 구현 상태는 위 **핵심 기능**(✅/🔜)·아래 **로드맵** 참조.
+> **대부분 구현됨.** 복잡도 라우팅은 `core/routing.py`(실단가 기준 비용 계상, `auto` 옵트인),
+> 컨센서스 검증과 교정·로그 기록은 `core/pipeline.gate_consensus` + 감사 JSONL,
+> HITL 분기는 `GateDecision.requires_human`. **남은 것은 Discord 봇 런타임 배선**(사람 승인 UI) —
+> 경계는 `adapters/discord/`로 분리돼 있고 런타임 이식은 별도 작업이다. 상세는 위 **핵심 기능** 참조.
 
 ## 🚀 빠른 시작
 
@@ -121,7 +128,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 566 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 588 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -189,7 +196,7 @@ mint-agent/
 │   ├── retrieval.py        # RAG 메커니즘 (청킹 · 코사인 · VectorStore 포트 · pgvector)
 │   ├── routing.py          # 복잡도 비용 라우터 (LLMGateway 데코레이터 + 계측)
 │   ├── gateway.py          # 게이트웨이 조립점 + 관측 배선 (default_gemini/openai)
-│   ├── pipeline.py         # PlatformAdapter 포트 + 발행 게이트 gate()
+│   ├── pipeline.py         # PlatformAdapter 포트 + 발행 게이트(감사 로그·HITL·컨센서스)
 │   ├── control.py  persona.py  orchestrator.py   # 라우팅·페르소나·브리핑 메커니즘
 │   ├── memory.py           # 채널 메모리 (경로 주입)
 │   ├── observability.py    # 비용·게이트 계측 → Markdown 리포트 렌더러
@@ -203,7 +210,7 @@ mint-agent/
 │   │   └── _http.py  search.py  fetch.py  summarize.py  rag.py  review.py  publish.py  adapter.py
 │   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 566 characterization tests
+├── tests/                  # 588 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```
@@ -217,7 +224,7 @@ mint-agent/
   `adapters/discord/`로, youtube는 콘텐츠 전용). 엔진은 플랫폼을 모른 채 포트로만 의존 — 테스트로 증명
 - [ ] **Phase 2 — 진행 중 🔄** · 신뢰 레이어 1차: 복잡도 비용 라우터 **✅** + 관측 배선·실측 usage **✅** +
   Trust eval 하니스 **✅**(실 로그에서 게이트 결함 검출·교정) + 멀티모델 컨센서스 검증 **✅** + 관측 리포트 **✅** ·
-  *남음: daily-drill 규칙 파이프 · 발행 전 가드레일*
+  *남음: daily-drill 규칙 파이프(외부 입력 필요)*
 - [x] **Phase 3 — 완료 ✅** · 2번째 어댑터(research/digest): `produce`(검색·페치·출처인용 요약, 순수 로직은
   원본 parity IDENTICAL) + `review`(출처 인용 검증 = 환각 게이트) + `publish`(마크다운 다이제스트, sink 주입) +
   RAG(청킹·임베딩·pgvector, 옵트인). **엔진 변경 0줄로 어댑터 추가 = 추상화 증명** — 유일한 엔진 변경은

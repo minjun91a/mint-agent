@@ -78,7 +78,20 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] **멀티모델 컨센서스 검증** — `core/trust/consensus.py`. 같은 콘텐츠를 N개 리뷰어로 교차검증 → 순수 `combine`(보수적 결합: reject 우선·전원 통과여야 passed·score 최댓값·위반 병합 + `agreement` consensus/disagree) + `run`(리뷰어 thunk 실행, 실패는 보수적 review로 격리). 리뷰어·모델 주입(엔진은 youtube·모델수 무지). **정직성**: 원본 `double_check` 소스가 youtube-agent에 부재 → *이식이 아니라 재구성*(단 `agreement` 의미는 실 로그에서 관측, 보수적 결합은 프로젝트 원칙에서 도출). 특성화 12건. 누적 **334 green**
 - [x] **관측 대시(리포트 렌더러)** — `core/observability.py`. 계측 데이터를 사람이 읽는 Markdown으로: `render_cost_report`(CallRecord→호출·비용·**실측/근사 비율**·미가격·티어/모델별 표) + `render_gate_report`(AuditRecord→통과율·권고/합의 분포·점수·**모순 건수**) + `dashboard`(묶음). 순수·결정적 테스트 10건. **실 로그 렌더(🟢)**: 게이트 감사 36건 → 통과율 2.8%·reject35/review1·disagree21/consensus15·모순 7건(score_range)까지 legible. 누적 **355 green**
 - [ ] auto 라우팅 옵트인 경로
-- [ ] 발행 전 가드레일 정비
+- [x] **발행 전 가드레일 정비** *(2026-07-10)*. `core/pipeline.py`. 게이트에 세 가지를 더했다.
+  **★ 발견한 구멍 ①**: `gate()`가 **아무 기록도 남기지 않았다.** 그래서 `core/trust/eval`은 *원본 운영
+  로그*만 감사할 수 있었고 — **우리가 만든 게이트는 감사 대상이 아니었다.** `audit_record`(순수, `AuditRecord`
+  호환) + `jsonl_audit_sink`(경로·시계 주입) 추가 → 🟢 `gate → jsonl → eval.evaluate →
+  observability.render_gate_report` 관통 확인(모순 감사 0건). **find→fix→verify 루프가 우리 시스템 안에서 닫혔다.**
+  **★ 발견한 구멍 ②**: `core/trust/consensus`를 **발행 경로에서 아무도 부르지 않았다**(엔진에만 존재).
+  `gate_consensus(reviewers)` 신설 — 리뷰어는 thunk 주입(엔진은 몇 개 모델이 도는지 모름), 한 명이라도
+  거절하면 보류, 갈리면(`disagree`) 사람에게, 리뷰어가 터져도 그 표를 보수적 `review`로 격리, **빈 리뷰어
+  목록은 통과시키지 않는다**(아무도 검증 안 한 것). 불일치는 감사 로그의 `agreement`에 남는다.
+  **③ HITL 지점 명시**: `requires_human`/`rejected` — `proceed=False`만으로는 **거절과 보류가 구분되지
+  않았다.** 보류만 사람에게 올린다. 단일 리뷰어 경로의 `agreement`는 빈 값(없는 신호를 지어내지 않음).
+  감사 실패는 게이트를 막지 않는다(관측은 주 경로를 막지 않는다). 특성화 +22. 누적 **588 green**
+
+> **Phase 2 코드 항목 완료.** 남은 것은 외부 입력이 필요한 [[daily-drill]] 검증규칙 파이프뿐.
 
 ## ✅ Phase 3 — 두 번째 어댑터 (research/digest) *(완료 2026-07-10)*
 
