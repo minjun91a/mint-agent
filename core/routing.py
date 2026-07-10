@@ -328,10 +328,21 @@ class CostRouter:
 
     def route_for(self, system: str, prompt: str, *, model: str = AUTO,
                   json_mode: bool = True) -> tuple[str, Classification | None]:
-        """실제 호출 없이 '이 요청이 어떤 모델로 갈지'만 계산한다(설명·미리보기용)."""
+        """실제 호출 없이 '이 요청이 어떤 모델로 갈지'만 계산한다(설명·미리보기용).
+
+        ⚠️ **라우트는 감싼 게이트웨이의 프로바이더와 맞아야 한다.** Gemini 게이트웨이에 Claude
+        라우트를 물리면 Claude 모델명이 Gemini SDK로 넘어간다. 조립점(`core.gateway`)이 프로바이더별
+        라우트를 붙이는 이유다. 티어에 모델이 없으면 조용히 넘어가지 않고 즉시 알린다.
+        """
         if not model or model == AUTO:
             cls = self._classify(system, prompt, json_mode=json_mode)
-            return self._route[cls.tier], cls
+            chosen = self._route.get(cls.tier)
+            if chosen is None:
+                raise ValueError(
+                    f"auto 라우팅 불가 — 이 라우터의 라우트에 '{cls.tier.value}' 티어 모델이 없습니다. "
+                    f"프로바이더에 맞는 route를 주입하거나 구체 모델을 명시하세요."
+                )
+            return chosen, cls
         return model, None
 
     def complete(self, system: str, prompt: str, *, model: str = AUTO,

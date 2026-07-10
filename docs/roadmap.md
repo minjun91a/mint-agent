@@ -59,7 +59,18 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
   2.50/15.00) → `estimate_cost`가 입력 토큰으로 티어를 고른다(`_resolve_price`). 단 입력이 근사
   (`estimate_tokens`)일 땐 임계값 판정도 근사 — `token_source`가 그 구분을 남긴다.
   표에 없는 모델은 여전히 미가격(None). 특성화 +9. 누적 **552 green**
-- [ ] **auto 라우팅 옵트인 경로** — 가변 복잡도 + 단가 있는(Claude) 호출 경로에 `model="auto"` 적용
+- [x] **auto 라우팅 옵트인 경로 + 프로바이더 라우트 불일치 교정** *(2026-07-10)*. `model="auto"`를
+  넘기면 복잡도로 티어를 골라 호출한다(기본은 여전히 관측 전용 = 명시 모델 통과).
+  **★ 잠복 버그 발견**: 세 팩토리(`default_gemini/openai/claude`)가 전부 `DEFAULT_ROUTE`(**Claude 모델**)를
+  쓰고 있었다. 관측 전용이라 아무도 `auto`를 넘기지 않아 드러나지 않았지만, 🟢 재현 결과
+  `default_gemini().route_for(..., model="auto")` → **`claude-haiku-4-5-20251001`**. auto를 켜는 순간
+  Claude 모델명이 Gemini SDK로 넘어간다. *이 슬라이스가 그 버그를 드러냈다.*
+  **교정**: 조립점이 프로바이더별 라우트를 붙인다 — `GEMINI_ROUTE`(flash-lite→flash→pro,
+  같은 SDK 안에서 티어링) · `CLAUDE_ROUTE`(haiku→sonnet→opus, `default_claude()` 신설) ·
+  `OPENAI_ROUTE = {}`(쓰는 모델이 `gpt-4o-mini` 하나뿐 → **없는 라우트를 지어내지 않는다**;
+  `auto`는 명시적 `ValueError`, 명시 모델은 그대로 통과). 엔진 `route_for`도 티어 미보유 시
+  조용히 넘어가지 않고 즉시 알린다. 라우트의 모든 모델은 실단가 보유(테스트로 강제).
+  🟢 절감폭(10k in/2k out): flash-lite `$0.0018` vs pro `$0.0325` — **18배**. 특성화 +14. 누적 **566 green**
 - [x] **실측 usage 연동** — `core/llm.py` 하위호환 포트 확장: `complete_ex(...) -> Completion(text, usage)` + `UsageAwareGateway` 프로토콜. 3 게이트웨이가 provider usage 추출(Gemini `usage_metadata`, OpenAI/Claude `usage`), `complete`는 `complete_ex().text`로 위임(기존 호출부 불변). `CostRouter`가 usage-aware 게이트웨이면 **실측 토큰**, 아니면 문자수 근사로 폴백 → `CallRecord.token_source`("measured"|"estimated")로 정직 라벨, `aggregate.measured_calls` 집계. usage 미노출이면 None(안 지어냄). 특성화 +11. 누적 **345 green**
 - [x] **eval 하니스** — `core/trust/eval.py`. 발행 게이트 결정 로그(`compliance_audit_*.jsonl`)를 읽어 **집계 지표**(`summarize`: 통과율·권고 분포·점수/위반 통계·채널별)와 **자체 모순 감사**(`check_invariants`: 정답 라벨 없이 게이트가 자기 규칙과 모순되지 않는지 — `reject⟹¬passed`·`approve⟹passed`·`score∈[0,1]`, 원본 compliance 설계 근거)로 변환. 경로 주입(실 로그는 외부), 합성 레코드/임시 파일로 결정적 테스트 17건. 누적 **318 green**. **실 로그 검증(🟢 관측, 2026-07-06)**: 36건 중 pass_rate 2.78%, agreement consensus 15/disagree 21, **모순 7건 검출**(전부 `score_range` — LLM 심층 경로가 점수를 정규화 안 해 score=40 등 스펙[0,1] 위반 → 실 데이터 품질 결함을 하니스가 잡음)
 - [x] **eval 후속 — 게이트 결함 교정** — eval이 검출한 score-range 결함을 `adapters/youtube/review.py` LLM 심층 경로에 **클램프**(score→[0,1]) + recommendation enum 검증(미확인→review 안전화)으로 반영. **원본과 의도적 차이**(원본 미정규화 점수를 계약에 맞게 교정). **find→fix→verify 루프 닫힘**: 교정된 Verdict가 `check_invariants`를 통과하는 테스트로 재확인. 특성화 +4. 누적 **322 green**

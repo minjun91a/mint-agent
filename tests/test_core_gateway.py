@@ -10,7 +10,11 @@ from __future__ import annotations
 import pytest
 
 from core.gateway import (
+    CLAUDE_ROUTE,
+    GEMINI_ROUTE,
+    OPENAI_ROUTE,
     clear_observer,
+    default_claude,
     default_gemini,
     default_openai,
     get_observer,
@@ -18,7 +22,7 @@ from core.gateway import (
     wrap,
 )
 from core.llm import LLMGateway
-from core.routing import CallRecord, CostRouter
+from core.routing import AUTO, CallRecord, CostRouter, DEFAULT_PRICING, Tier, is_priced
 
 
 @pytest.fixture(autouse=True)
@@ -111,3 +115,71 @@ def test_default_openai_wraps_real_gateway(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert default_openai().available is False
     assert default_openai(api_key="k").available is True
+
+
+# ── auto 라우팅: 라우트는 프로바이더와 짝을 이룬다 ──────────────────────────
+# 회귀 방지. 이전에는 세 팩토리가 전부 DEFAULT_ROUTE(Claude 모델)를 썼다. 관측 전용이라
+# 아무도 auto를 넘기지 않아 드러나지 않았지만, default_gemini()에 auto를 주면
+# claude-haiku-4-5-20251001을 Gemini SDK로 넘기는 잠복 버그였다.
+
+
+def test_gemini_auto_routes_within_gemini():
+    gw = default_gemini(api_key="k")
+    cheap, cls_c = gw.route_for("", "이 문단을 요약해줘", model=AUTO)
+    deep, cls_d = gw.route_for("", "이 아키텍처를 분석·리팩터해줘", model=AUTO)
+
+    assert cheap == "gemini-2.5-flash-lite" and cls_c.tier is Tier.CHEAP
+    assert deep == "gemini-2.5-pro" and cls_d.tier is Tier.DEEP
+
+
+def test_gemini_auto_never_picks_a_claude_model():
+    """회귀 방지: 프로바이더를 넘나드는 모델명이 나오면 안 된다."""
+    gw = default_gemini(api_key="k")
+    for prompt in ("요약해줘", "설계를 분석해줘", "그냥 답해줘"):
+        chosen, _ = gw.route_for("", prompt, model=AUTO)
+        assert chosen.startswith("gemini-")
+
+
+def test_claude_auto_routes_within_claude():
+    gw = default_claude(api_key="k")
+    for prompt in ("요약해줘", "설계를 분석해줘", "그냥 답해줘"):
+        chosen, _ = gw.route_for("", prompt, model=AUTO)
+        assert chosen.startswith("claude-")
+
+
+def test_openai_auto_raises_instead_of_guessing():
+    """라우트가 비었으면 조용히 엉뚱한 모델로 가지 않고 명시적으로 실패한다."""
+    with pytest.raises(ValueError, match="auto 라우팅 불가"):
+        default_openai(api_key="k").route_for("", "요약해줘", model=AUTO)
+
+
+def test_openai_explicit_model_still_works():
+    """auto만 막힌다 — 명시 모델 경로(gpt-4o-mini)는 그대로 통과·계측된다."""
+    chosen, cls = default_openai(api_key="k").route_for("", "요약해줘", model="gpt-4o-mini")
+    assert chosen == "gpt-4o-mini" and cls is None
+
+
+def test_every_routed_model_has_a_real_price():
+    """라우트의 모든 모델은 실단가가 있어야 한다 — 라우팅의 비용 절감이 계측되지 않으면 무의미."""
+    for route in (GEMINI_ROUTE, CLAUDE_ROUTE):
+        for tier, model in route.items():
+            assert is_priced(model), f"{tier.value} 티어 모델 {model}에 단가가 없다"
+
+
+def test_openai_route_is_intentionally_empty():
+    assert OPENAI_ROUTE == {}      # 티어를 나눌 모델이 없다 — 없는 라우트를 지어내지 않는다
+
+
+def test_gemini_route_cheap_is_actually_cheaper_than_deep():
+    """라우팅이 값을 하려면 티어 간 단가 격차가 실제로 있어야 한다."""
+    cheap = DEFAULT_PRICING[GEMINI_ROUTE[Tier.CHEAP]]
+    deep = DEFAULT_PRICING[GEMINI_ROUTE[Tier.DEEP]]
+    assert cheap["in"] < deep["in"] and cheap["out"] < deep["out"]
+
+
+def test_auto_routing_is_still_opt_in():
+    """기본은 관측 전용 — 명시 모델은 라우팅되지 않고 그대로 통과한다."""
+    chosen, cls = default_gemini(api_key="k").route_for("", "설계를 분석해줘",
+                                                        model="gemini-2.5-flash")
+    assert chosen == "gemini-2.5-flash"   # DEEP으로 승격되지 않음
+    assert cls is None

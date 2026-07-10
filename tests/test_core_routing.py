@@ -415,3 +415,28 @@ def test_aggregate_counts_measured_calls():
         CallRecord("m", "deep", 0, 10, 5, 0.001, 0.4, True, [], "estimated"),
     ]
     assert aggregate(recs)["measured_calls"] == 1
+
+
+def test_auto_routing_without_matching_tier_raises():
+    """라우트에 티어가 없으면 조용히 넘어가지 않고 즉시 알린다.
+
+    Gemini 게이트웨이에 Claude 라우트를 물리면 Claude 모델명이 Gemini SDK로 넘어가는 잠복 버그가
+    있었다(조립점에서 프로바이더별 라우트로 교정). 엔진 레벨에서도 빈 라우트를 막는다.
+    """
+    router = CostRouter(_FakeGateway(), route={})
+    with pytest.raises(ValueError, match="auto 라우팅 불가"):
+        router.complete("", "요약해줘", model=AUTO)
+
+
+def test_auto_routing_partial_route_raises_for_missing_tier_only():
+    # cheap만 있는 라우트: 저난도는 통과, 고난도는 명시적 실패.
+    router = CostRouter(_FakeGateway(), route={Tier.CHEAP: "toy-cheap"}, pricing=_TOY_PRICING)
+    assert router.route_for("", "이 문단을 요약해줘", model=AUTO)[0] == "toy-cheap"
+    with pytest.raises(ValueError, match="deep"):
+        router.route_for("", "이 아키텍처를 분석·리팩터해줘", model=AUTO)
+
+
+def test_explicit_model_bypasses_empty_route():
+    """라우트가 비어도 명시 모델은 통과한다 — auto만 라우트를 요구한다."""
+    router = CostRouter(_FakeGateway(reply="ok"), route={})
+    assert router.complete("", "hi", model="어떤-모델") == "ok"
