@@ -42,10 +42,10 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 
 > **Phase 1 완료.** 엔진(`core/`)은 플랫폼(YouTube·Discord)을 모른 채 포트로만 의존하고, 플랫폼 로직은 어댑터에 격리됨을 테스트로 증명. produce 전 단계 + review/publish + 엔진 5모듈(llm·memory·pipeline·control·persona·orchestrator) + 게이트웨이 3프로바이더 + 비용 라우터(Phase 2 선행 착수) 이식 완료.
 
-## 🔄 Phase 2 — 신뢰 레이어 1차 *(착수)*
+## 🔄 Phase 2 — 신뢰 레이어 1차 *(코드 항목 완료 2026-07-10 · daily-drill만 범위 밖)*
 
 - [x] **모델 게이트웨이 프로바이더 #3** — `core/llm.py`에 `ClaudeGateway` 추가(지연 anthropic, messages API 매핑, json_mode=system 지시, Windows 한글 헤더 회피 상속). Gemini·OpenAI·Claude가 같은 `complete` 포트 → 비용 라우터 기본 라우트(Opus/Sonnet/Haiku)가 실제 도달 대상을 가짐. (fake anthropic 매핑·strip·빈응답 폴백 테스트)
-- [x] **복잡도 기반 비용 라우터** — `core/routing.py`. **`CostRouter`가 `LLMGateway`를 구현**해 기존 게이트웨이를 감싸는 드롭인(어댑터 코드 0줄 변경으로 라우팅·계측 삽입). 순수 `classify`(키워드·길이·json_mode → 티어+점수+근거) + `estimate_cost`/`DEFAULT_PRICING`(**운영 `claude_runner._PRICING`·`_estimate_cost`에서 상속** — 지어낸 수치 없음, 주입 가능) + `estimate_tokens`(근사, 실측 usage는 아래 과제) + `CallRecord`·`jsonl_sink`(경로·시계 주입)·`aggregate`(비용 리포트). 토이 라우트/가짜 게이트웨이로 **엔진 범용성 증명**(Claude 몰라도 동작). 특성화 32건. 누적 **267 green**
+- [x] **복잡도 기반 비용 라우터** — `core/routing.py`. **`CostRouter`가 `LLMGateway`를 구현**해 기존 게이트웨이를 감싸는 드롭인(어댑터 코드 0줄 변경으로 라우팅·계측 삽입). 순수 `classify`(키워드·길이·json_mode → 티어+점수+근거) + `estimate_cost`/`DEFAULT_PRICING`(**운영 `claude_runner._PRICING`·`_estimate_cost`에서 상속** — ⚠️ *당시 "지어낸 수치 없음"이라 적었으나, 상속한 `opus-4-7` 단가가 3배 틀렸음이 나중에 드러난다 → 아래 "실단가 확보 + 상속한 단가 오류 교정" 참조*) + `estimate_tokens`(근사, 실측 usage는 아래 과제) + `CallRecord`·`jsonl_sink`(경로·시계 주입)·`aggregate`(비용 리포트). 토이 라우트/가짜 게이트웨이로 **엔진 범용성 증명**(Claude 몰라도 동작). 특성화 32건. 누적 **267 green**
 - [x] **파이프라인 관측 배선** — `core/gateway.py` 조립점(composition root) 추가. 어댑터·엔진의 7개 게이트웨이 생성점(`else GeminiGateway()/OpenAIGateway()`)을 `default_gemini()/default_openai()`(=`CostRouter` 관측 래핑)으로 교체 → 라이브 경로의 모든 LLM 호출이 토큰·티어·근거로 계측됨. **관측 전용**(명시 모델 안 덮음)이라 기존 동작 불변, 라우팅은 `model="auto"` 옵트인 시만. **비용 정직성**: 단가표에 있는 모델만 비용 계상, Gemini/OpenAI는 미가격(None) — 지어내지 않음(`is_priced`). 특성화 +10. 누적 **277 green**
 - [x] **실단가 확보 + 상속한 단가 오류 교정** *(2026-07-10)*. Gemini(2.5-flash·flash-lite·pro)·
   OpenAI(gpt-4o-mini)·Claude 신세대(opus-4-8·sonnet-5) 단가를 **프로바이더 공식 문서로 직접 확인**해
@@ -78,7 +78,6 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
       *본 트랙 범위 밖 — mint-agent 완성 후 사용자가 처음부터 끝까지 직접 진행(2026-07-10 결정).*
 - [x] **멀티모델 컨센서스 검증** — `core/trust/consensus.py`. 같은 콘텐츠를 N개 리뷰어로 교차검증 → 순수 `combine`(보수적 결합: reject 우선·전원 통과여야 passed·score 최댓값·위반 병합 + `agreement` consensus/disagree) + `run`(리뷰어 thunk 실행, 실패는 보수적 review로 격리). 리뷰어·모델 주입(엔진은 youtube·모델수 무지). **정직성**: 원본 `double_check` 소스가 youtube-agent에 부재 → *이식이 아니라 재구성*(단 `agreement` 의미는 실 로그에서 관측, 보수적 결합은 프로젝트 원칙에서 도출). 특성화 12건. 누적 **334 green**
 - [x] **관측 대시(리포트 렌더러)** — `core/observability.py`. 계측 데이터를 사람이 읽는 Markdown으로: `render_cost_report`(CallRecord→호출·비용·**실측/근사 비율**·미가격·티어/모델별 표) + `render_gate_report`(AuditRecord→통과율·권고/합의 분포·점수·**모순 건수**) + `dashboard`(묶음). 순수·결정적 테스트 10건. **실 로그 렌더(🟢)**: 게이트 감사 36건 → 통과율 2.8%·reject35/review1·disagree21/consensus15·모순 7건(score_range)까지 legible. 누적 **355 green**
-- [ ] auto 라우팅 옵트인 경로
 - [x] **발행 전 가드레일 정비** *(2026-07-10)*. `core/pipeline.py`. 게이트에 세 가지를 더했다.
   **★ 발견한 구멍 ①**: `gate()`가 **아무 기록도 남기지 않았다.** 그래서 `core/trust/eval`은 *원본 운영
   로그*만 감사할 수 있었고 — **우리가 만든 게이트는 감사 대상이 아니었다.** `audit_record`(순수, `AuditRecord`
