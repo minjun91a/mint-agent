@@ -11,7 +11,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_done_|_Phase_2%2B3_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-408_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-413_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **Phase 1(엔진/어댑터 경계 분리) 완료 · Phase 2(신뢰 레이어)·Phase 3(2번째 어댑터) 진행 중 — 특성화 테스트 408개 green.**
+> **Phase 1(엔진/어댑터 경계 분리) 완료 · Phase 2(신뢰 레이어)·Phase 3(2번째 어댑터) 진행 중 — 특성화 테스트 413개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -51,7 +51,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   구분 표기). *실단가 확보는 Phase 2 잔여.*
 - **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 408 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 413 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🔬 Trust eval 하니스 — ✅ 작동** · 발행 게이트의 실제 결정 로그를 집계 지표 + **자체 모순 감사**로
   변환(`core/trust/eval.py`). 정답 라벨 없이 게이트가 자기 규칙과 모순되는지 검사 — 실 운영 로그에서
   **점수 스펙 위반(score∉[0,1]) 실사례를 검출**했다(LLM 리뷰어의 미정규화 점수).
@@ -99,7 +99,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 408 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 413 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -170,7 +170,7 @@ mint-agent/
 │   │   └── _http.py  search.py  fetch.py  summarize.py  adapter.py
 │   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 408 characterization tests
+├── tests/                  # 413 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```

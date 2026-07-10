@@ -65,6 +65,13 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
   추출(`_ffmpeg.py`와 같은 근거). **LLM**은 `LLMGateway` 주입(`default_gemini()` 조립점 → 관측 자동 승계).
   `ResearchAdapter`가 `PlatformAdapter` 포트를 만족. **★ 엔진 변경 0줄**(`git diff -- core/` 공백)
   = [ADR 0003](adr/0003-2번째-어댑터-research.md) 명제 1차 증명. 특성화 53건. 누적 **408 green**
+- [x] **엔진 결함 교정 — 산문 경로의 JSON 폴백 누수** *(2번째 어댑터가 폭로)*. `core/llm.py`의 빈 응답
+  폴백 `_EMPTY_JSON="{}"`이 `json_mode`와 무관하게 3 게이트웨이 전부에 적용되고 있었다. 지금까지
+  호출부가 모두 JSON을 기대해 아무도 안 밟았지만, 산문을 기대하는 호출부는 이미 넷이다
+  (`core/orchestrator` ×2 · `core/persona` · 새 `research/summarize`) → 모델이 빈 응답을 내면
+  **사용자가 리서치 요약으로 `"{}"`를 본다**(재현 확인). `_empty_fallback(json_mode)`로 교정:
+  JSON 요청엔 `"{}"`, 산문 요청엔 `""`(원본 research의 `(resp.text or "")`와도 일치).
+  **find→fix→verify 루프**(eval 결함 교정 `8fc909f`와 같은 리듬). 특성화 +5. 누적 **413 green**
 - [ ] **`review`** — 출처 인용 검증(인용 번호 유효성·발췌에 없는 주장)을 `core.trust.Verdict`로 반환.
       *여기서 계약 정제가 강제된다*: `PlatformAdapter.review(content, seo)`의 `seo`는 youtube 어휘다
       (`core/pipeline.py`·`core/trust/verify.py`가 "2번째 어댑터가 강제할 때 정제"라고 예고해 둔 지점)

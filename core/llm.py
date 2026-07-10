@@ -20,6 +20,8 @@ core.llm — 모델 호출 게이트웨이 (엔진의 단일 LLM seam).
   - **프로바이더 무관 포트**: 같은 `complete(system, prompt, *, model, temperature, json_mode)`가
     Gemini(system_instruction+generate_content)와 OpenAI(chat messages)에 동일하게 매핑된다.
     어댑터는 어느 프로바이더인지 모른 채 동작 → 프로바이더 교체로 엔진/어댑터 코드는 불변.
+  - **빈 응답 폴백은 `json_mode`를 따른다**(`_empty_fallback`). JSON 요청엔 `"{}"`, 산문 요청엔
+    `""`. 산문 호출부에 `"{}"`가 새어나가면 사용자에게 그대로 보인다.
 
 Phase 2 연결점: 비용 라우팅(복잡도→모델 티어)과 관측성(토큰·지연·비용 로깅)은 전부 이 seam에
 끼운다. 게이트웨이를 데코레이트/래핑하면 어댑터 코드 변경 없이 라우팅·계측이 들어온다.
@@ -33,8 +35,18 @@ from typing import Protocol, runtime_checkable
 
 log = logging.getLogger("mint.core.llm")
 
-# 응답이 비어 올 때의 안전 기본값 — 호출부는 JSON 파싱을 기대하므로 빈 객체로 폴백.
+# 응답이 비어 올 때의 안전 기본값 — JSON을 요청한 호출부는 파싱 가능한 빈 객체를 받아야 한다.
 _EMPTY_JSON = "{}"
+
+
+def _empty_fallback(json_mode: bool) -> str:
+    """빈 응답(안전필터 차단 등) 폴백값.
+
+    `json_mode`면 파싱 가능한 빈 객체를, 아니면 **빈 문자열**을 돌려준다. 산문을 요청한
+    호출부(orchestrator 브리핑·persona 응답·research 요약)에 `"{}"`가 새어나가면 그대로
+    사용자에게 노출된다 — 2번째 어댑터(research)가 드러낸 결함.
+    """
+    return _EMPTY_JSON if json_mode else ""
 
 
 @dataclass(frozen=True)
@@ -134,7 +146,7 @@ class GeminiGateway:
             generation_config=generation_config,
         )
         resp = gm.generate_content(prompt)
-        text = (getattr(resp, "text", None) or _EMPTY_JSON).strip()
+        text = (getattr(resp, "text", None) or _empty_fallback(json_mode)).strip()
         # Gemini usage_metadata: prompt_token_count / candidates_token_count
         usage = _usage_from(getattr(resp, "usage_metadata", None),
                             "prompt_token_count", "candidates_token_count")
@@ -183,7 +195,7 @@ class OpenAIGateway:
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         resp = client.chat.completions.create(**kwargs)
-        text = (resp.choices[0].message.content or _EMPTY_JSON).strip()
+        text = (resp.choices[0].message.content or _empty_fallback(json_mode)).strip()
         # OpenAI usage: prompt_tokens / completion_tokens
         usage = _usage_from(getattr(resp, "usage", None),
                             "prompt_tokens", "completion_tokens")
@@ -246,4 +258,4 @@ class ClaudeGateway:
         text = "".join(getattr(b, "text", "") for b in blocks)
         # Anthropic usage: input_tokens / output_tokens
         usage = _usage_from(getattr(resp, "usage", None), "input_tokens", "output_tokens")
-        return Completion(text=(text or _EMPTY_JSON).strip(), usage=usage)
+        return Completion(text=(text or _empty_fallback(json_mode)).strip(), usage=usage)

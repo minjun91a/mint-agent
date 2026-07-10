@@ -300,3 +300,37 @@ def test_complete_still_returns_str_via_complete_ex(monkeypatch):
     # 하위호환: complete는 여전히 str만 반환(complete_ex.text 위임).
     _install_fake_genai(monkeypatch, text="  plain  ", usage=(1, 2))
     assert GeminiGateway(api_key="k").complete("S", "P", model="m") == "plain"
+
+
+# ── 빈 응답 폴백은 json_mode를 따른다 ────────────────────────────────
+# 2번째 어댑터(research)가 드러낸 결함: 산문을 요청한 호출부(orchestrator 브리핑·persona 응답·
+# research 요약)에 JSON 폴백 "{}"이 새어나가 사용자에게 그대로 노출됐다. json_mode=True 경로의
+# 기존 동작("{}")은 불변이다 — 위 test_complete_empty_response_falls_back_to_empty_object 참조.
+
+
+def test_gemini_empty_response_in_prose_mode_returns_empty_string(monkeypatch):
+    _install_fake_genai(monkeypatch, text=None)
+    out = GeminiGateway(api_key="k").complete("S", "P", model="m", json_mode=False)
+    assert out == ""
+
+
+def test_openai_empty_response_in_prose_mode_returns_empty_string(monkeypatch):
+    _install_fake_openai(monkeypatch, content=None)
+    out = OpenAIGateway(api_key="k").complete("S", "P", model="m", json_mode=False)
+    assert out == ""
+
+
+def test_claude_empty_response_in_prose_mode_returns_empty_string(monkeypatch):
+    _install_fake_anthropic(monkeypatch, text=None)
+    out = ClaudeGateway(api_key="k").complete("S", "P", model="m", json_mode=False)
+    assert out == ""
+
+
+def test_openai_empty_response_in_json_mode_still_returns_empty_object(monkeypatch):
+    _install_fake_openai(monkeypatch, content=None)
+    assert OpenAIGateway(api_key="k").complete("S", "P", model="m") == "{}"
+
+
+def test_claude_empty_response_in_json_mode_still_returns_empty_object(monkeypatch):
+    _install_fake_anthropic(monkeypatch, text=None)
+    assert ClaudeGateway(api_key="k").complete("S", "P", model="m") == "{}"
