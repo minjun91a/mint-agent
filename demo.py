@@ -188,9 +188,15 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="예: python demo.py gate routing",
     )
-    parser.add_argument("demos", nargs="*", choices=list(DEMOS), default=[],
+    # `choices=`를 쓰지 않는다: Python 3.12/3.13의 argparse는 `nargs="*"`에서 기본값 `[]`까지
+    # choices에 대해 검증해 인자 없이 실행하면 죽는다(3.14에서 수정됨). 직접 검증한다.
+    parser.add_argument("demos", nargs="*", default=[],
                         help=f"실행할 데모 ({' · '.join(DEMOS)}). 생략하면 전체.")
     args = parser.parse_args(argv)
+
+    unknown = [d for d in args.demos if d not in DEMOS]
+    if unknown:
+        parser.error(f"알 수 없는 데모: {', '.join(unknown)} (가능: {' · '.join(DEMOS)})")
 
     _force_utf8_stdout()
     chosen = args.demos or list(DEMOS)

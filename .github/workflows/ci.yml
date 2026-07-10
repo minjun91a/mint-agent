@@ -13,7 +13,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        # pyproject의 requires-python = ">=3.12" 전 범위를 검증한다.
+        # 3.14를 뺀 채로 3.14에서 개발하다 argparse 동작 차이를 CI에서야 발견한 적이 있다
+        # (nargs="*" + choices의 기본값 검증이 3.14에서 바뀜) — 개발 환경도 매트릭스에 넣는다.
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 

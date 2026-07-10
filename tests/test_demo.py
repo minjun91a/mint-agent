@@ -21,6 +21,12 @@ def test_every_demo_runs_without_keys_or_network(capsys):
 
 
 def test_main_runs_all_demos_by_default(capsys):
+    """인자 없이 실행하면 전체가 돈다.
+
+    회귀 방지: `nargs="*"` + `choices=`를 함께 쓰면 Python 3.12/3.13의 argparse가 기본값 `[]`를
+    choices에 대해 검증해 `SystemExit(2)`로 죽는다(3.14에서 수정됨). 로컬이 3.14라 통과했고
+    CI(3.12·3.13)에서만 터졌다 — 그래서 이제 CI 매트릭스에 3.14도 넣었다.
+    """
     assert demo.main([]) == 0
     out = capsys.readouterr().out
     for heading in ("발행 게이트", "환각 인용 검증", "복잡도 비용 라우팅",
@@ -35,9 +41,22 @@ def test_main_runs_a_single_demo(capsys):
     assert "환각 인용 검증" not in out
 
 
+def test_main_runs_several_named_demos(capsys):
+    assert demo.main(["gate", "routing"]) == 0
+    out = capsys.readouterr().out
+    assert "발행 게이트" in out and "복잡도 비용 라우팅" in out
+    assert "감사 루프" not in out
+
+
 def test_main_rejects_unknown_demo():
     with pytest.raises(SystemExit):
         demo.main(["존재하지-않는-데모"])
+
+
+def test_main_rejects_mix_of_known_and_unknown(capsys):
+    """알 수 없는 이름이 섞여 있으면 아무것도 실행하지 않고 죽는다."""
+    with pytest.raises(SystemExit):
+        demo.main(["gate", "없는데모"])
 
 
 # ── 데모가 주장하는 결과가 실제 결과인가 ────────────────────────────
