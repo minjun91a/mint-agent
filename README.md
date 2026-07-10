@@ -11,7 +11,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1%2B3_done_|_Phase_2_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-588_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-597_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 588개 green.**
+> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 597개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -79,7 +79,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   보수적으로 결합한다. 한 명이라도 거절하면 보류, 갈리면(`disagree`) 사람에게, 리뷰어가 터져도 그 표를
   보수적 `review`로 격리, **빈 리뷰어 목록은 통과시키지 않는다.** 리뷰어는 thunk 주입 — 엔진은 몇 개
   모델이 도는지 모른다. 불일치는 감사 로그에 남아 리포트에 뜬다.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 588 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 597 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🔬 Trust eval 하니스 — ✅ 작동** · 발행 게이트의 실제 결정 로그를 집계 지표 + **자체 모순 감사**로
   변환(`core/trust/eval.py`). 정답 라벨 없이 게이트가 자기 규칙과 모순되는지 검사 — 실 운영 로그에서
   **점수 스펙 위반(score∉[0,1]) 실사례를 검출**했다(LLM 리뷰어의 미정규화 점수).
@@ -97,38 +97,115 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 
 ## 🏗 아키텍처
 
+**의존은 한 방향으로만 흐른다: 어댑터 → 엔진.** 엔진은 어떤 플랫폼이 붙어 있는지 모른다.
+
 ```mermaid
-flowchart LR
-    A[요청 유형] --> B{복잡도 분석}
-    B -->|고난도| C1[Opus]
-    B -->|중간| C2[Sonnet]
-    B -->|단순| C3[Haiku]
-    C1 & C2 & C3 --> D[Trust Layer]
-    D --> E{컨센서스 검증}
-    E -->|불일치·판정| F[교정 + 로그 기록]
-    F --> D
-    E -->|통과| G{HITL 승인 필요?}
-    G -->|예| H[사람 승인 / Discord]
-    G -->|아니오| I[응답 반환]
-    H --> I
+flowchart TB
+    subgraph adapters["adapters/ — 플랫폼이 갇히는 곳"]
+        yt["youtube<br/><sub>스크립트·TTS·영상·썸네일<br/>컴플라이언스 게이트</sub>"]
+        rs["research<br/><sub>검색·페치·인용 요약<br/>인용 무결성 게이트</sub>"]
+        dc["discord<br/><sub>채널 → 역할</sub>"]
+    end
+
+    subgraph core["core/ — 플랫폼 무관 엔진"]
+        pipe["pipeline<br/><sub>PlatformAdapter · gate · gate_consensus</sub>"]
+        trust["trust/<br/><sub>verify · eval · consensus</sub>"]
+        gw["llm · embedding · gateway<br/><sub>프로바이더 포트 + 조립점</sub>"]
+        rt["routing<br/><sub>복잡도 → 티어 · 비용 계측</sub>"]
+        rag["retrieval<br/><sub>청킹 · 유사도 · pgvector</sub>"]
+        obs["observability<br/><sub>Markdown 리포트</sub>"]
+    end
+
+    yt & rs -.->|"PlatformAdapter 구현"| pipe
+    dc -->|"IO → 콘텐츠"| yt
+    yt & rs -->|"complete() 포트"| gw
+    rs -->|"발췌 선택(옵트인)"| rag
+    pipe --> trust
+    rt -->|"드롭인 데코레이터"| gw
+    pipe -.->|"감사 JSONL"| trust
+    trust & rt --> obs
 ```
 
-> **대부분 구현됨.** 복잡도 라우팅은 `core/routing.py`(실단가 기준 비용 계상, `auto` 옵트인),
-> 컨센서스 검증과 교정·로그 기록은 `core/pipeline.gate_consensus` + 감사 JSONL,
-> HITL 분기는 `GateDecision.requires_human`. **남은 것은 Discord 봇 런타임 배선**(사람 승인 UI) —
-> 경계는 `adapters/discord/`로 분리돼 있고 런타임 이식은 별도 작업이다. 상세는 위 **핵심 기능** 참조.
+<details>
+<summary><b>발행 한 건이 지나가는 길</b> (클릭)</summary>
 
-## 🚀 빠른 시작
+```mermaid
+flowchart LR
+    P["produce<br/><sub>어댑터</sub>"] --> R{"review<br/><sub>1인 또는 N인 교차검증</sub>"}
+    R -->|"approve"| PUB["publish"]
+    R -->|"review<br/>(불일치 포함)"| H["사람 판단<br/><sub>requires_human</sub>"]
+    R -->|"reject"| X["발행 안 함"]
+    R -.->|"결정 기록"| A["감사 JSONL"]
+    A --> E["eval<br/><sub>모순 감사</sub>"] --> RP["리포트"]
+    H -.->|"🔴 미배선"| D["Discord 승인 UI"]
+```
+
+</details>
+
+> 🟢 **구현됨**: 복잡도 라우팅(`core/routing.py`, 실단가 기준 비용 계상, `auto` 옵트인) ·
+> 컨센서스 게이트(`gate_consensus`) · 감사 로그와 모순 감사 루프 · HITL 분기(`requires_human`).
+> 🔴 **미배선**: Discord 승인 UI(경계는 `adapters/discord/`에 분리돼 있고 봇 런타임 이식은 별도 작업) ·
+> 실 Postgres 왕복. 전체 목록은 [docs/metrics.md](docs/metrics.md#아직-아닌-것-정직-표기).
+
+## 🚀 빠른 시작 — API 키 없이 30초
 
 ```bash
-# 1. 클론
-git clone https://github.com/minjun91a/mint-agent.git
-cd mint-agent
+git clone https://github.com/minjun91a/mint-agent.git && cd mint-agent
+pip install -r requirements-dev.txt   # 외부 SDK 불필요 — 주입 설계
+python demo.py                        # 키·네트워크 없이 실제로 도는 코드
+```
 
-# 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
-pip install -r requirements-dev.txt
+<details open>
+<summary><b><code>python demo.py</code> 실제 출력</b> (일부)</summary>
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 588 green, CI에서도 동일 실행
+```text
+ 1. 발행 게이트 — approve만 통과. 애매하면 멈추고 사람에게
+──────────────────────────────────────────────────────────────────
+  AI 라벨 있음       → approve  proceed=True   발행 진행
+  AI 라벨 없음       → review   proceed=False  사람 판단 대기
+                   └ [med] ai_labeling
+
+ 2. 환각 인용 검증 — LLM 없이 잡는다 (사실 문제이므로)
+──────────────────────────────────────────────────────────────────
+  정상 인용              → approve  —
+  없는 출처 인용           → reject   citation_out_of_range
+  안 읽은 소스 인용         → reject   citation_unfetched_source
+  인용 없음              → reject   no_citation
+
+ 3. 복잡도 비용 라우팅 — 쉬운 일에 비싼 모델을 쓰지 않는다
+──────────────────────────────────────────────────────────────────
+  저난도  이 문단을 요약해줘           Gemini→gemini-2.5-flash-lite  Claude→claude-haiku-4-5-20251001
+  고난도  이 아키텍처를 분석·리팩터해줘     Gemini→gemini-2.5-pro         Claude→claude-opus-4-7
+
+  같은 요청(10k in / 2k out)의 실단가:
+    저난도 티어 flash-lite  $0.00180
+    고난도 티어 pro         $0.03250   (18배)
+
+ 4. 컨센서스 게이트 — 리뷰어가 갈리면 사람에게
+──────────────────────────────────────────────────────────────────
+  전원 승인        → approve  consensus  → 발행
+  한 명 거절       → reject   disagree   → 거절
+  의견 갈림        → review   disagree   → 사람
+  리뷰어 장애       → review   disagree   → 사람
+  리뷰어 없음       → review   disagree   → 사람
+
+ 5. 감사 루프 — 게이트 결정 → JSONL → eval 하니스 → 리포트
+──────────────────────────────────────────────────────────────────
+  ## 발행 게이트 감사 리포트
+  - **결정** 3건 · **통과율** 100.0%
+  - **권고** review=2 · approve=1
+  - **합의** disagree=1
+  - **모순 감사** 0건 ✅ 없음
+```
+
+</details>
+
+> 데모는 **실제로 도는 코드만** 보여준다. 실 LLM 호출·업로드·임베딩은 키가 필요하므로 넣지 않았다 —
+> 없는 것을 있는 척하지 않는다. `python demo.py gate routing`처럼 골라 실행할 수도 있다.
+> 이 출력은 CI가 매번 검증한다([tests/test_demo.py](tests/test_demo.py)).
+
+```bash
+# 특성화 테스트 (이식 동일성 보증) — 597 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -209,8 +286,9 @@ mint-agent/
 │   ├── research/           # 2번째 어댑터 — 검색·페치·요약·인용검증·발행 (+ RAG 선택기)
 │   │   └── _http.py  search.py  fetch.py  summarize.py  rag.py  review.py  publish.py  adapter.py
 │   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
-├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 588 characterization tests
+├── docs/                   # roadmap · metrics · inventory · ADR · 개발 블로그
+├── tests/                  # 597 characterization tests
+├── demo.py                 # 키 없이 도는 데모 진입점
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```
