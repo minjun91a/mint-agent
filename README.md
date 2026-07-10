@@ -9,9 +9,9 @@
 pipeline running in production since April 2026. *The platform is an adapter; the engine is the asset.*</sub>
 
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
-![status](https://img.shields.io/badge/status-Phase_1_done_|_Phase_2%2B3_WIP-blue)
+![status](https://img.shields.io/badge/status-Phase_1%2B3_done_|_Phase_2_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-471_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-543_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **Phase 1(엔진/어댑터 경계 분리) 완료 · Phase 2(신뢰 레이어)·Phase 3(2번째 어댑터) 진행 중 — 특성화 테스트 471개 green.**
+> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 543개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -40,7 +40,12 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   어댑터(웹 검색 → 본문 페치 → 출처 인용 요약 → 인용 검증 → 마크다운 발행)를 붙였다. produce를 붙이는
   동안 `core/`는 **한 줄도 바뀌지 않았다**(`git diff -- core/` 공백). HTTP·LLM·발행 sink가 전부 주입
   지점이라 네트워크·API 키 없이 전 구간 테스트된다. `produce → gate → publish` 관통 테스트로 3단
-  계약이 실제로 이어짐을 고정 — 환각 인용이면 파일이 생기지 않는다. *pgvector는 🔜 Phase 3 잔여.*
+  계약이 실제로 이어짐을 고정 — 환각 인용이면 파일이 생기지 않는다.
+- **🧠 RAG (청킹·임베딩·유사도 검색) — ✅ 엔진 작동, 옵트인** · 본문을 앞에서부터 자르는 대신 질의에
+  관련된 발췌만 골라 모델 입력에 넣는다(`core/retrieval.py` + `core/embedding.py`). 임베더(Gemini·OpenAI)와
+  저장소(인메모리·pgvector)가 **둘 다 주입**이라 엔진은 프로바이더도 DB도 모른다. **인용 무결성 불변식**:
+  선택기는 본문과 같은 길이·순서를 돌려주므로 2번 문서가 탈락해도 3번은 여전히 `[출처 3]`이다.
+  `PgVectorStore`는 연결 객체를 주입받아 psycopg 의존이 없다 — 🔴 *실 Postgres 왕복은 미검증(로컬 DB 미배선).*
 - **🔎 출처 인용 검증(환각 게이트) — ✅ 작동, LLM 불필요** · 요약이 **존재하지 않는 출처**를 인용했거나
   (`[출처 7]`인데 출처는 3건) **페치에 실패해 읽지도 않은 소스**를 인용하면 발행을 거절한다. 이건 LLM 없이
   검증 가능한 **사실 문제**라 룰 층이 완전히 결정적이다. 근거 본문을 주면 LLM 근거 대조(발췌에 없는 주장)까지.
@@ -59,7 +64,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   구분 표기). *실단가 확보는 Phase 2 잔여.*
 - **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 471 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 543 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🔬 Trust eval 하니스 — ✅ 작동** · 발행 게이트의 실제 결정 로그를 집계 지표 + **자체 모순 감사**로
   변환(`core/trust/eval.py`). 정답 라벨 없이 게이트가 자기 규칙과 모순되는지 검사 — 실 운영 로그에서
   **점수 스펙 위반(score∉[0,1]) 실사례를 검출**했다(LLM 리뷰어의 미정규화 점수).
@@ -107,7 +112,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 471 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 543 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -162,6 +167,8 @@ print(aggregate(records))   # {'calls': 1, 'cost_usd': ..., 'by_tier': {'cheap':
 mint-agent/
 ├── core/                   # 플랫폼 무관 엔진
 │   ├── llm.py              # 모델 게이트웨이 (Gemini · OpenAI · Claude 프로바이더)
+│   ├── embedding.py        # 임베딩 게이트웨이 (Gemini · OpenAI) — llm.py와 같은 모양
+│   ├── retrieval.py        # RAG 메커니즘 (청킹 · 코사인 · VectorStore 포트 · pgvector)
 │   ├── routing.py          # 복잡도 비용 라우터 (LLMGateway 데코레이터 + 계측)
 │   ├── gateway.py          # 게이트웨이 조립점 + 관측 배선 (default_gemini/openai)
 │   ├── pipeline.py         # PlatformAdapter 포트 + 발행 게이트 gate()
@@ -174,11 +181,11 @@ mint-agent/
 │   │   ├── story_writer.py  seo.py  image_gen.py  captions.py  tts_engine.py
 │   │   ├── video_builder.py  thumbnail_gen.py  clip_extractor.py
 │   │   └── publish.py  review.py  adapter.py  control.py  persona.py  orchestrator.py
-│   ├── research/           # 2번째 어댑터 — 검색·페치·요약·인용검증·발행
-│   │   └── _http.py  search.py  fetch.py  summarize.py  review.py  publish.py  adapter.py
+│   ├── research/           # 2번째 어댑터 — 검색·페치·요약·인용검증·발행 (+ RAG 선택기)
+│   │   └── _http.py  search.py  fetch.py  summarize.py  rag.py  review.py  publish.py  adapter.py
 │   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 471 characterization tests
+├── tests/                  # 543 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```
@@ -193,10 +200,11 @@ mint-agent/
 - [ ] **Phase 2 — 진행 중 🔄** · 신뢰 레이어 1차: 복잡도 비용 라우터 **✅** + 관측 배선·실측 usage **✅** +
   Trust eval 하니스 **✅**(실 로그에서 게이트 결함 검출·교정) + 멀티모델 컨센서스 검증 **✅** + 관측 리포트 **✅** ·
   *남음: 실단가·auto 라우팅 · daily-drill 규칙 파이프*
-- [ ] **Phase 3 — 진행 중 🔄** · 2번째 어댑터(research/digest): `produce`(검색·페치·출처인용 요약) **✅**
-  — **엔진 변경 0줄로 추가**, 순수 로직은 원본 parity IDENTICAL · `review`(출처 인용 검증 = 환각 게이트) **✅**
-  — 여기서 **예고된 계약 정제** 실행(`review(content, seo)` → `review(content, context)`) ·
-  `publish`(마크다운 다이제스트, sink 주입 · 덮어쓰기 안전) **✅** · *남음: pgvector(RAG)*
+- [x] **Phase 3 — 완료 ✅** · 2번째 어댑터(research/digest): `produce`(검색·페치·출처인용 요약, 순수 로직은
+  원본 parity IDENTICAL) + `review`(출처 인용 검증 = 환각 게이트) + `publish`(마크다운 다이제스트, sink 주입) +
+  RAG(청킹·임베딩·pgvector, 옵트인). **엔진 변경 0줄로 어댑터 추가 = 추상화 증명** — 유일한 엔진 변경은
+  `core/pipeline.py`가 미리 예고해 둔 계약 정제(`review(content, seo)` → `review(content, context)`)뿐이고,
+  `core/trust/verify.py`는 한 줄도 안 바뀌었다
 - [ ] **Phase 4** — 채용용 마감: 아키텍처 다이어그램 · 실측 지표 · 데모
 
 전체 진행 추적 → [docs/roadmap.md](docs/roadmap.md) · 결정 기록 → [docs/adr/](docs/adr/) · 빌드 과정 → [docs/blog/](docs/blog/)

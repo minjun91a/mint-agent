@@ -100,6 +100,7 @@
 | 파일 | 읽을 것 |
 |---|---|
 | [core/llm.py](../core/llm.py) | `GeminiGateway` · `OpenAIGateway` · `ClaudeGateway` · `_usage_from` · `_empty_fallback` |
+| [core/embedding.py](../core/embedding.py) | `EmbeddingGateway` · `_as_vectors` · `GeminiEmbedder` · `OpenAIEmbedder` |
 | [core/routing.py](../core/routing.py) | `Tier` · `classify` · `Classification` · `estimate_cost` · `is_priced` · `estimate_tokens` · `CallRecord` · `jsonl_sink` · `aggregate` · `AUTO` · `CostRouter` |
 | [core/gateway.py](../core/gateway.py) | `set_observer` · `wrap` · `default_gemini` · `default_openai` |
 
@@ -123,11 +124,15 @@
 | [core/control.py](../core/control.py) | `Command` · `Rule` · `IntentRouter` · `describe` · `dispatch` |
 | [core/persona.py](../core/persona.py) | `Persona` · `PersonaRegistry` · `ask` |
 | [core/orchestrator.py](../core/orchestrator.py) | `collect_sources` · `build_briefing` · `answer` · `run_brief` |
+| [core/retrieval.py](../core/retrieval.py) | `chunk_text` · `chunk_documents` · `cosine` · `VectorStore` · `InMemoryVectorStore` · `PgVectorStore` · `Retriever` |
 
 **예측 드릴**
 - `dispatch`에 **핸들러가 주입되지 않은** intent를 주면 반환은?
 - `collect_sources`에서 수집기 하나가 예외를 던지면 나머지 소스는 어떻게 되는가?
 - `PersonaRegistry`가 `channel_key=None`을 받으면?
+- `chunk_text("abcdefghij", size=4, overlap=1)`은 몇 조각이고 각각 무엇인가?
+- `chunk_documents(["a", "", "c"])`에서 "c"의 `source_id`는? 그 선택이 `[출처 N]`과 무슨 관계인가?
+- `PgVectorStore`는 왜 psycopg를 import하지 않는가? `GoogleUploadBackend`와 무엇이 같은가?
 
 **완료 조건**: 각 모듈에서 "엔진에 남은 것"과 "어댑터로 간 것"을 한 쌍씩 지목할 수 있다.
 

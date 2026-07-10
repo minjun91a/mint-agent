@@ -21,11 +21,18 @@ adapters.research.summarize — 수집한 본문 → 출처 인용 요약(LLM).
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
 from adapters.research.fetch import MAX_BODY_CHARS
 from adapters.research.search import SearchHit
 from core.gateway import default_gemini
 from core.llm import LLMGateway
+
+
+class Selector(Protocol):
+    """본문 발췌 선택기 포트 — 질의와 본문 목록을 받아 **같은 길이**의 발췌 목록을 돌려준다."""
+
+    def select(self, query: str, bodies: list[str]) -> list[str]: ...
 
 log = logging.getLogger("mint.adapters.research.summarize")
 
@@ -73,13 +80,21 @@ def build_prompt(query: str, blocks: list[str]) -> str:
 
 def summarize(query: str, hits: list[SearchHit], bodies: list[str], *,
               model: str = _DEFAULT_MODEL,
-              gateway: LLMGateway | None = None) -> str:
-    """출처 인용을 강제한 한국어 요약. 게이트웨이 미가용/출처 부재는 사유 문자열로 반환."""
+              gateway: LLMGateway | None = None,
+              selector: Selector | None = None) -> str:
+    """출처 인용을 강제한 한국어 요약. 게이트웨이 미가용/출처 부재는 사유 문자열로 반환.
+
+    `selector`(예: `rag.RagSelector`)를 주면 본문을 질의 관련 발췌로 먼저 좁힌다. 선택기는 본문과
+    **같은 길이·같은 순서**를 돌려주기로 계약돼 있어 출처 번호가 어긋나지 않는다.
+    """
     gw = gateway if gateway is not None else default_gemini()
 
     if not gw.available:
         log.warning("LLM 게이트웨이 미가용 — 요약 생략")
         return UNAVAILABLE
+
+    if selector is not None:
+        bodies = selector.select(query, bodies)
 
     blocks = build_sources_block(hits, bodies)
     if not blocks:

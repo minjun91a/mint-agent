@@ -16,6 +16,9 @@ YouTube 어댑터와 도메인이 전혀 다름에도 엔진 코드가 한 줄�
 `review(digest, context)`의 `context`에 `{"bodies": [...]}`를 주면 근거 대조(LLM)까지 하고,
 없으면 룰 인용 검증만 한다. `produce`는 원본 `run_research`와 동일한 dict를 돌려주므로 본문을
 포함하지 않는다 — 근거 본문이 필요하면 호출부가 `fetch_text` 결과를 보관해 넘긴다.
+
+`selector`(예: `rag.RagSelector`)를 주면 요약 전에 본문을 질의 관련 발췌로 좁힌다. 미주입 시
+기존 동작(앞에서부터 문자 예산으로 자르기) 그대로 — RAG는 **옵트인**이다.
 """
 from __future__ import annotations
 
@@ -26,7 +29,7 @@ from adapters.research.fetch import fetch_text
 from adapters.research.publish import ResearchPublisher
 from adapters.research.review import CitationReviewer
 from adapters.research.search import search
-from adapters.research.summarize import _DEFAULT_MODEL, summarize
+from adapters.research.summarize import _DEFAULT_MODEL, Selector, summarize
 from core.llm import LLMGateway
 from core.trust.verify import Verdict
 
@@ -41,13 +44,15 @@ class ResearchAdapter:
                  fetch: HttpFetcher = urllib_fetch,
                  review_deep: bool = True,
                  reviewer: CitationReviewer | None = None,
-                 publisher: ResearchPublisher | None = None) -> None:
+                 publisher: ResearchPublisher | None = None,
+                 selector: Selector | None = None) -> None:
         self._top_k = top_k
         self._model = model
         self._gateway = gateway
         self._fetch = fetch
         self._reviewer = reviewer or CitationReviewer(deep=review_deep, gateway=gateway)
         self._publisher = publisher
+        self._selector = selector
 
     def produce(self, brief: str) -> dict[str, Any]:
         """질의(brief) → 리서치 다이제스트. 검색 결과가 없으면 사유를 담아 빈 결과를 돌려준다."""
@@ -56,12 +61,14 @@ class ResearchAdapter:
             return {"query": brief, "summary": NO_HITS, "hits": []}
 
         bodies = [fetch_text(h.url, fetch=self._fetch) for h in hits]
-        summary = summarize(brief, hits, bodies,
-                            model=self._model, gateway=self._gateway)
+        summary = summarize(brief, hits, bodies, model=self._model,
+                            gateway=self._gateway, selector=self._selector)
         return {
             "query": brief,
             "summary": summary,
             "hits": [
+                # fetched_chars는 **수집한** 본문 길이다(RAG가 고른 발췌 길이가 아니라).
+                # review의 citation_unfetched_source가 보는 것이 바로 이 신호다.
                 {"title": h.title, "url": h.url, "snippet": h.snippet,
                  "fetched_chars": len(b)}
                 for h, b in zip(hits, bodies)

@@ -58,7 +58,7 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [ ] auto 라우팅 옵트인 · Gemini/OpenAI 실단가 확보(라이브 비용 켜기)
 - [ ] 발행 전 가드레일 정비
 
-## 🔄 Phase 3 — 두 번째 어댑터 (research/digest) *(착수 2026-07-10)*
+## ✅ Phase 3 — 두 번째 어댑터 (research/digest) *(완료 2026-07-10)*
 
 - [x] **`produce` 이식** — `adapters/research/`(`_http`·`search`·`fetch`·`summarize`·`adapter`).
   원본 `youtube-agent/agents/research.py`(DDG 검색 → 본문 페치 → Gemini 출처인용 요약)를 순수/IO로 갈라
@@ -98,8 +98,24 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
   **명시적 배선을 요구**한다. **3단 계약 관통 테스트**: `produce → gate → publish`에서 게이트가
   통과시킨 다이제스트만 발행되고, 환각 인용(`[출처 9]`)이면 파일이 생기지 않음을 고정. 특성화 +24.
   누적 **471 green**
-- [ ] pgvector 도입 (RAG)
-- [ ] **엔진 변경 0으로 어댑터 추가** = 추상화 증명 *(produce 구간 달성 · review/publish 남음)*
+- [x] **RAG + pgvector** — 엔진 `core/embedding.py`(`EmbeddingGateway` 포트 + `GeminiEmbedder`·`OpenAIEmbedder`,
+  `LLMGateway`와 같은 모양) + `core/retrieval.py`(순수 `chunk_text`·`chunk_documents`·`cosine`·SQL 빌더 /
+  `VectorStore` 포트 / `InMemoryVectorStore` 결정적 구현 / `PgVectorStore`) + 어댑터 `adapters/research/rag.py`
+  (`RagSelector` — 요약 전에 본문을 질의 관련 발췌로 좁힘, **옵트인**).
+  **★ 정직 표기 ①**: 이건 *어댑터가 강제한 엔진 변경이 아니다*. research는 이미 엔진 0줄로 붙었고
+  produce·review·publish가 그 상태로 돈다. RAG는 **새 엔진 역량**이며 플랫폼을 모른다(토이 문서로 검증).
+  **★ 정직 표기 ②**: `PgVectorStore`는 **연결 객체를 주입**받으므로 이 모듈에 psycopg 의존이 없다
+  (`GoogleUploadBackend`와 같은 패턴) → 가짜 연결로 SQL·바인딩을 고정. 🔴 **실 Postgres 왕복은 미검증**
+  (로컬 DB 미배선) — 지어내지 않는다. 테이블명은 SQL 보간 지점이라 화이트리스트 검증.
+  **인용 무결성 불변식**: 선택기는 본문과 **같은 길이·같은 순서**를 돌려주고 `Chunk.source_id`가 1-based
+  문서 번호라 `[출처 N]`이 어긋나지 않는다(2번 문서가 탈락해도 3번은 `[출처 3]`). RAG 실패·임베더 미가용은
+  원본 본문으로 폴백. 특성화 +72. 누적 **543 green**
+- [x] **엔진 변경 0으로 어댑터 추가 = 추상화 증명** — produce·review·publish 3단 모두 달성.
+      *유일한 엔진 변경은 예고된 계약 정제(`seo` → `context`)였고, `core/trust/verify.py`는 한 줄도 안 바뀌었다.*
+
+> **Phase 3 완료.** 도메인이 전혀 다른 두 번째 어댑터가 붙었고, 그 과정에서 엔진의 숨은 가정을 두 번
+> 폭로했다(산문 경로 JSON 폴백 누수 `c3a30d1` · `review`의 youtube 어휘 `6854f19`). 예고해 둔 자리에서만
+> 계약이 정제됐다는 것이 설계가 옳았다는 증거다.
 
 ## ⬜ 리뷰 라운드 — 개발 완료 후 순차 코드 리뷰 *(Phase 3 완주 시 발동)*
 
