@@ -81,10 +81,21 @@ _TOY_PRICING = {
 # ── estimate_cost: 원본 공식 parity ──────────────────────────────────────────
 
 def test_estimate_cost_matches_original_formula():
-    # opus-4-7: (1000*15 + 1000*75)/1e6 = 0.09  (원본 _PRICING·_estimate_cost 상속)
-    assert estimate_cost("claude-opus-4-7", 1000, 1000) == pytest.approx(0.09)
+    # 원본 _estimate_cost 공식: (in*단가_in + out*단가_out) / 1e6
     # haiku: (2000*1 + 500*5)/1e6 = 0.0045
     assert estimate_cost("claude-haiku-4-5", 2000, 500) == pytest.approx(0.0045)
+    # sonnet-4-6: (1000*3 + 1000*15)/1e6 = 0.018
+    assert estimate_cost("claude-sonnet-4-6", 1000, 1000) == pytest.approx(0.018)
+
+
+def test_opus_price_is_corrected_from_inherited_table():
+    """회귀 방지: 운영 claude_runner에서 상속한 15.00/75.00은 **틀린 값**이었다.
+
+    실제 공시가는 5.00/25.00(확인 2026-07-10) — 상속한 값이 비용을 3배로 부풀리고 있었다.
+    '출처가 있다'와 '정확하다'는 다르다.
+    """
+    assert DEFAULT_PRICING["claude-opus-4-7"] == {"in": 5.00, "out": 25.00}
+    assert estimate_cost("claude-opus-4-7", 1000, 1000) == pytest.approx(0.03)   # 0.09가 아니다
 
 
 def test_estimate_cost_unknown_model_uses_fallback_price():
@@ -97,10 +108,47 @@ def test_estimate_cost_pricing_is_injectable():
         (100 * 100.0 + 100 * 200.0) / 1e6)
 
 
+# ── 컨텍스트 길이 티어링 (gemini-2.5-pro) ────────────────────────────────────
+
+def test_long_context_tier_not_applied_below_threshold():
+    # 200k 이하: 1.25 / 10.00
+    assert estimate_cost("gemini-2.5-pro", 1_000, 1_000) == pytest.approx((1.25 + 10.0) / 1e6 * 1000)
+
+
+def test_long_context_tier_applied_above_threshold():
+    # 200k 초과: 2.50 / 15.00 — 입력·출력 **양쪽** 단가가 오른다
+    in_tok = 200_001
+    got = estimate_cost("gemini-2.5-pro", in_tok, 1_000)
+    assert got == pytest.approx((in_tok * 2.50 + 1_000 * 15.00) / 1e6)
+
+
+def test_long_context_threshold_is_exclusive():
+    """임계값 '초과'에만 인상 — 정확히 200k는 기본 단가."""
+    at = estimate_cost("gemini-2.5-pro", 200_000, 0)
+    assert at == pytest.approx(200_000 * 1.25 / 1e6)
+
+
+def test_models_without_long_context_ignore_tiering():
+    assert estimate_cost("gemini-2.5-flash", 500_000, 0) == pytest.approx(500_000 * 0.30 / 1e6)
+
+
+# ── is_priced: 실단가 확보 후 ────────────────────────────────────────────────
+
 def test_is_priced_flags_table_membership():
-    assert is_priced("claude-opus-4-7") is True            # DEFAULT_PRICING에 있음
-    assert is_priced("gemini-2.5-flash") is False          # 단가 미확보 → 미가격
+    assert is_priced("claude-opus-4-7") is True
     assert is_priced("toy-deep", _TOY_PRICING) is True
+    assert is_priced("존재하지-않는-모델") is False          # 표에 없으면 비용을 지어내지 않는다
+
+
+def test_gemini_and_openai_are_now_priced():
+    """실단가 확보(2026-07-10) 전에는 미가격(None)이었다 — 이제 라이브 경로 비용이 켜진다."""
+    for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gpt-4o-mini"):
+        assert is_priced(model) is True
+
+
+def test_new_generation_models_are_priced():
+    for model in ("claude-opus-4-8", "claude-sonnet-5"):
+        assert is_priced(model) is True
 
 
 # ── estimate_tokens: 근사 ────────────────────────────────────────────────────
@@ -237,13 +285,22 @@ def test_router_records_explicit_tier_label():
 
 
 def test_router_unpriced_model_records_none_cost():
-    # 단가표에 없는 모델(예: Gemini)은 비용을 지어내지 않고 None으로 남긴다.
+    # 단가표에 없는 모델은 비용을 지어내지 않고 None으로 남긴다.
     records: list[CallRecord] = []
-    router = CostRouter(_FakeGateway(), sink=records.append)   # DEFAULT_PRICING = Claude만
-    router.complete("", "요약해줘", model="gemini-2.5-flash")
-    assert records[0].model == "gemini-2.5-flash"
+    router = CostRouter(_FakeGateway(), sink=records.append)
+    router.complete("", "요약해줘", model="어떤-신규-모델")
+    assert records[0].model == "어떤-신규-모델"
     assert records[0].cost_usd is None                        # 미가격
     assert records[0].in_tokens > 0                           # 토큰·티어는 여전히 계측
+
+
+def test_router_prices_gemini_now_that_rates_are_known():
+    """실단가 확보 후: 라이브 Gemini 호출도 비용이 계상된다(이전엔 None)."""
+    records: list[CallRecord] = []
+    router = CostRouter(_FakeGateway(), sink=records.append)
+    router.complete("", "요약해줘", model="gemini-2.5-flash")
+    assert records[0].cost_usd is not None
+    assert records[0].cost_usd > 0
 
 
 def test_sink_failure_does_not_break_call():
@@ -295,14 +352,14 @@ def test_aggregate_empty():
 def test_aggregate_skips_unpriced_from_cost():
     records = [
         CallRecord("claude-opus-4-7", "deep", 4, 100, 50, 0.02, 0.4, True, []),
-        CallRecord("gemini-2.5-flash", "explicit", 0, 20, 10, None, 0.4, True, []),  # 미가격
+        CallRecord("단가-미확보-모델", "explicit", 0, 20, 10, None, 0.4, True, []),  # 미가격
     ]
     rep = aggregate(records)
     assert rep["calls"] == 2 and rep["unpriced_calls"] == 1
     assert rep["cost_usd"] == pytest.approx(0.02)             # 미가격은 총액에서 제외
     assert rep["in_tokens"] == 120                            # 토큰은 미가격도 합산
-    assert rep["by_model"]["gemini-2.5-flash"]["calls"] == 1
-    assert rep["by_model"]["gemini-2.5-flash"]["cost_usd"] == 0.0
+    assert rep["by_model"]["단가-미확보-모델"]["calls"] == 1
+    assert rep["by_model"]["단가-미확보-모델"]["cost_usd"] == 0.0
 
 
 # ── 기본 라우트/가격은 출처 붙은(=가격표에 있는) 모델만 가리킨다 ──

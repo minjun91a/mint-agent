@@ -16,11 +16,14 @@ core.gateway — 게이트웨이 조립점(composition root) + 관측 배선.
   - **관측 전용 배선**이다. 감싸도 `model`을 덮지 않으므로(명시 모델은 그대로 통과) 기존 어댑터의
     의도된 모델 선택·동작은 **불변**이다. 라우팅(`model="auto"`)은 호출부가 명시적으로 옵트인할 때만.
   - **비용 정직성**: 라우터는 단가표에 있는 모델만 비용을 매기고, 없으면 미가격(None)으로 남긴다
-    (`core.routing.is_priced`). 그래서 Gemini/OpenAI처럼 아직 단가가 없는 프로바이더는 토큰·티어만
-    계측되고 비용은 지어내지 않는다. 실단가를 확보하면 `pricing`을 주입해 비용이 켜진다.
+    (`core.routing.is_priced`). Gemini·OpenAI·Claude 실단가는 2026-07-10에 프로바이더 공식
+    문서로 확인해 `DEFAULT_PRICING`에 등록됐다 — 라이브 경로의 비용이 켜져 있다. 표에 없는
+    모델은 여전히 미가격(None)으로 남고, 비용을 지어내지 않는다.
   - 관측 sink 기본값은 없음(no-op) — `set_observer`로 켜기 전에는 래퍼가 계측만 하고 버린다.
 """
 from __future__ import annotations
+
+from typing import Any
 
 from core.llm import GeminiGateway, LLMGateway, OpenAIGateway
 from core.routing import DEFAULT_PRICING, DEFAULT_ROUTE, CostRouter, Sink, Tier
@@ -48,7 +51,7 @@ def clear_observer() -> None:
 
 def wrap(base: LLMGateway, *,
          route: dict[Tier, str] = DEFAULT_ROUTE,
-         pricing: dict[str, dict[str, float]] = DEFAULT_PRICING) -> CostRouter:
+         pricing: dict[str, dict[str, Any]] = DEFAULT_PRICING) -> CostRouter:
     """임의의 게이트웨이를 현재 관측 sink가 달린 `CostRouter`로 감싼다(관측 전용 기본값)."""
     return CostRouter(base, route=route, pricing=pricing, sink=_observer)
 

@@ -11,7 +11,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 [![CI](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/minjun91a/mint-agent/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1%2B3_done_|_Phase_2_WIP-blue)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
-![tests](https://img.shields.io/badge/tests-543_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-552_passing-brightgreen)
 ![LLM](https://img.shields.io/badge/LLM-Gemini_%7C_OpenAI_%7C_Claude-green)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![last commit](https://img.shields.io/github/last-commit/minjun91a/mint-agent)
@@ -29,7 +29,7 @@ pipeline running in production since April 2026. *The platform is an adapter; th
 모른 채* 담고, 플랫폼별 로직은 어댑터에 격리한다. 최종 목표는 여기에 **신뢰 레이어**(복잡도 기반
 비용 라우팅 · 검증 · HITL · 관측)를 얹어, 데모가 아니라 **운영 위에서 검증되는 시스템**을 만드는 것.
 
-> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 543개 green.**
+> **Phase 1(엔진/어댑터 경계 분리)·Phase 3(2번째 어댑터) 완료 · Phase 2(신뢰 레이어) 진행 중 — 특성화 테스트 552개 green.**
 > 아래 "핵심 기능"은 ✅(현재 작동) / 🔜(계획) 을 정직하게 구분한다.
 
 ## 핵심 기능
@@ -55,16 +55,20 @@ pipeline running in production since April 2026. *The platform is an adapter; th
   엔진 게이트는 둘을 구분하지 않는다(`gate()`가 research 어댑터를 구동하는 테스트로 고정).
 - **🧩 모델 게이트웨이 — ✅ 작동** · Gemini·OpenAI·Claude를 같은 `complete` 포트 뒤로 통합.
   프로바이더를 늘려도 엔진/어댑터 코드는 **0줄 변경**.
-- **🧭 복잡도 기반 비용 라우터 — ✅ 엔진 작동 + 라이브 경로 관측 배선** · 요청 복잡도를 추정해
+- **🧭 복잡도 기반 비용 라우터 — ✅ 작동, 실단가로 라이브 비용 계상** · 요청 복잡도를 추정해
   티어(Opus/Sonnet/Haiku)를 고르고, 호출마다 (모델·토큰·비용·근거)를 계측한다. 라우터 자신이
   게이트웨이 포트를 구현해 **드롭인**이라, 조립점(`core/gateway.py`)에서 어댑터·엔진의 모든
-  게이트웨이를 감싸 라이브 호출을 계측한다(명시 모델은 안 덮음 = 동작 불변). **비용 정직성**:
-  단가표에 있는 모델만 비용 계상, 미확보 프로바이더(Gemini/OpenAI)는 미가격(None)으로 남긴다 —
-  *지어내지 않는다.* **토큰은 provider 실측 usage가 있으면 실측, 없으면 문자수 근사**(`token_source`로
-  구분 표기). *실단가 확보는 Phase 2 잔여.*
+  게이트웨이를 감싸 라이브 호출을 계측한다(명시 모델은 안 덮음 = 동작 불변). Gemini·OpenAI·Claude
+  단가를 **공식 문서로 직접 확인**해 등록했고(`gemini-2.5-pro`의 200k 컨텍스트 티어링 포함),
+  표에 없는 모델은 여전히 미가격(None) — *지어내지 않는다.* **토큰은 provider 실측 usage가 있으면
+  실측, 없으면 문자수 근사**(`token_source`로 구분 표기).
+- **🧾 상속한 단가도 검증한다 — ✅ 3배 오류 검출·교정** · 운영 코드에서 물려받은 `claude-opus-4-7`
+  단가가 `$15/$75`(구세대 Opus 4.1 값)였고, 실제 공시가는 `$5/$25`였다. 문서에는 *"출처가 붙은 값,
+  지어낸 수치 없음"*이라고 적혀 있었다. **출처가 있다는 것과 정확하다는 것은 다르다** — 100k/20k
+  호출 기준 `$3.00 → $1.00`으로 교정하고 회귀 테스트로 고정했다.
 - **🛡️ 발행 전 Trust 게이트 + HITL 정책 — ✅ 룰 기반 작동** · `approve`만 통과, `review`·`reject`는
   사람 보류. AI 라벨·금지표현·전문가 자문 영역 검사.
-- **🧪 특성화 테스트 + 원본 parity — ✅ 543 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
+- **🧪 특성화 테스트 + 원본 parity — ✅ 552 green** · 운영 코드를 안 깨고 이식했음을 테스트로 보증.
 - **🔬 Trust eval 하니스 — ✅ 작동** · 발행 게이트의 실제 결정 로그를 집계 지표 + **자체 모순 감사**로
   변환(`core/trust/eval.py`). 정답 라벨 없이 게이트가 자기 규칙과 모순되는지 검사 — 실 운영 로그에서
   **점수 스펙 위반(score∉[0,1]) 실사례를 검출**했다(LLM 리뷰어의 미정규화 점수).
@@ -112,7 +116,7 @@ cd mint-agent
 # 2. 테스트 실행에 필요한 최소 의존성 (외부 SDK 불필요 — 주입 설계)
 pip install -r requirements-dev.txt
 
-# 3. 특성화 테스트 (이식 동일성 보증) — 543 green, CI에서도 동일 실행
+# 3. 특성화 테스트 (이식 동일성 보증) — 552 green, CI에서도 동일 실행
 python -m pytest
 ```
 
@@ -185,7 +189,7 @@ mint-agent/
 │   │   └── _http.py  search.py  fetch.py  summarize.py  rag.py  review.py  publish.py  adapter.py
 │   └── discord/            # Discord IO 경계 (채널 정체성 → 페르소나 라우팅)
 ├── docs/                   # roadmap · inventory · ADR · 개발 블로그
-├── tests/                  # 543 characterization tests
+├── tests/                  # 552 characterization tests
 ├── pyproject.toml
 └── LICENSE                 # MIT
 ```
@@ -199,7 +203,7 @@ mint-agent/
   `adapters/discord/`로, youtube는 콘텐츠 전용). 엔진은 플랫폼을 모른 채 포트로만 의존 — 테스트로 증명
 - [ ] **Phase 2 — 진행 중 🔄** · 신뢰 레이어 1차: 복잡도 비용 라우터 **✅** + 관측 배선·실측 usage **✅** +
   Trust eval 하니스 **✅**(실 로그에서 게이트 결함 검출·교정) + 멀티모델 컨센서스 검증 **✅** + 관측 리포트 **✅** ·
-  *남음: 실단가·auto 라우팅 · daily-drill 규칙 파이프*
+  *남음: auto 라우팅 · daily-drill 규칙 파이프 · 발행 전 가드레일*
 - [x] **Phase 3 — 완료 ✅** · 2번째 어댑터(research/digest): `produce`(검색·페치·출처인용 요약, 순수 로직은
   원본 parity IDENTICAL) + `review`(출처 인용 검증 = 환각 게이트) + `publish`(마크다운 다이제스트, sink 주입) +
   RAG(청킹·임베딩·pgvector, 옵트인). **엔진 변경 0줄로 어댑터 추가 = 추상화 증명** — 유일한 엔진 변경은

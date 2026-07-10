@@ -47,7 +47,18 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [x] **모델 게이트웨이 프로바이더 #3** — `core/llm.py`에 `ClaudeGateway` 추가(지연 anthropic, messages API 매핑, json_mode=system 지시, Windows 한글 헤더 회피 상속). Gemini·OpenAI·Claude가 같은 `complete` 포트 → 비용 라우터 기본 라우트(Opus/Sonnet/Haiku)가 실제 도달 대상을 가짐. (fake anthropic 매핑·strip·빈응답 폴백 테스트)
 - [x] **복잡도 기반 비용 라우터** — `core/routing.py`. **`CostRouter`가 `LLMGateway`를 구현**해 기존 게이트웨이를 감싸는 드롭인(어댑터 코드 0줄 변경으로 라우팅·계측 삽입). 순수 `classify`(키워드·길이·json_mode → 티어+점수+근거) + `estimate_cost`/`DEFAULT_PRICING`(**운영 `claude_runner._PRICING`·`_estimate_cost`에서 상속** — 지어낸 수치 없음, 주입 가능) + `estimate_tokens`(근사, 실측 usage는 아래 과제) + `CallRecord`·`jsonl_sink`(경로·시계 주입)·`aggregate`(비용 리포트). 토이 라우트/가짜 게이트웨이로 **엔진 범용성 증명**(Claude 몰라도 동작). 특성화 32건. 누적 **267 green**
 - [x] **파이프라인 관측 배선** — `core/gateway.py` 조립점(composition root) 추가. 어댑터·엔진의 7개 게이트웨이 생성점(`else GeminiGateway()/OpenAIGateway()`)을 `default_gemini()/default_openai()`(=`CostRouter` 관측 래핑)으로 교체 → 라이브 경로의 모든 LLM 호출이 토큰·티어·근거로 계측됨. **관측 전용**(명시 모델 안 덮음)이라 기존 동작 불변, 라우팅은 `model="auto"` 옵트인 시만. **비용 정직성**: 단가표에 있는 모델만 비용 계상, Gemini/OpenAI는 미가격(None) — 지어내지 않음(`is_priced`). 특성화 +10. 누적 **277 green**
-- [ ] **Gemini/OpenAI 실단가 확보** → 가격표 주입으로 라이브 경로 비용 켜기(현재 미가격 None)
+- [x] **실단가 확보 + 상속한 단가 오류 교정** *(2026-07-10)*. Gemini(2.5-flash·flash-lite·pro)·
+  OpenAI(gpt-4o-mini)·Claude 신세대(opus-4-8·sonnet-5) 단가를 **프로바이더 공식 문서로 직접 확인**해
+  `DEFAULT_PRICING`에 등록 → 라이브 경로 비용이 켜졌다(이전엔 전부 미가격 None).
+  **★ 결함 교정**: 운영 `claude_runner._PRICING`에서 상속한 `claude-opus-4-7`이 **15.00/75.00**이었는데
+  실제 공시가는 **5.00/25.00**이다(구세대 Opus 4.1 단가가 남아 있던 것). 🟢 100k in/20k out 호출 기준
+  `$3.00 → $1.00`, **정확히 3배 과대계상**하고 있었다. roadmap·코드 주석은 이 값을 "출처가 붙은 값,
+  지어낸 수치 없음"이라고 적어 두었다 — **출처가 있다는 것과 정확하다는 것은 다르다.** 상속한 수치도
+  검증 대상임을 회귀 테스트로 고정.
+  **컨텍스트 티어링**: `gemini-2.5-pro`는 프롬프트 200k 토큰 초과 시 단가가 인상된다(1.25/10.00 →
+  2.50/15.00) → `estimate_cost`가 입력 토큰으로 티어를 고른다(`_resolve_price`). 단 입력이 근사
+  (`estimate_tokens`)일 땐 임계값 판정도 근사 — `token_source`가 그 구분을 남긴다.
+  표에 없는 모델은 여전히 미가격(None). 특성화 +9. 누적 **552 green**
 - [ ] **auto 라우팅 옵트인 경로** — 가변 복잡도 + 단가 있는(Claude) 호출 경로에 `model="auto"` 적용
 - [x] **실측 usage 연동** — `core/llm.py` 하위호환 포트 확장: `complete_ex(...) -> Completion(text, usage)` + `UsageAwareGateway` 프로토콜. 3 게이트웨이가 provider usage 추출(Gemini `usage_metadata`, OpenAI/Claude `usage`), `complete`는 `complete_ex().text`로 위임(기존 호출부 불변). `CostRouter`가 usage-aware 게이트웨이면 **실측 토큰**, 아니면 문자수 근사로 폴백 → `CallRecord.token_source`("measured"|"estimated")로 정직 라벨, `aggregate.measured_calls` 집계. usage 미노출이면 None(안 지어냄). 특성화 +11. 누적 **345 green**
 - [x] **eval 하니스** — `core/trust/eval.py`. 발행 게이트 결정 로그(`compliance_audit_*.jsonl`)를 읽어 **집계 지표**(`summarize`: 통과율·권고 분포·점수/위반 통계·채널별)와 **자체 모순 감사**(`check_invariants`: 정답 라벨 없이 게이트가 자기 규칙과 모순되지 않는지 — `reject⟹¬passed`·`approve⟹passed`·`score∈[0,1]`, 원본 compliance 설계 근거)로 변환. 경로 주입(실 로그는 외부), 합성 레코드/임시 파일로 결정적 테스트 17건. 누적 **318 green**. **실 로그 검증(🟢 관측, 2026-07-06)**: 36건 중 pass_rate 2.78%, agreement consensus 15/disagree 21, **모순 7건 검출**(전부 `score_range` — LLM 심층 경로가 점수를 정규화 안 해 score=40 등 스펙[0,1] 위반 → 실 데이터 품질 결함을 하니스가 잡음)
@@ -55,7 +66,7 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [ ] eval 후속 — daily-drill 검증규칙 연동(검출 패턴을 trust 규칙 후보로)
 - [x] **멀티모델 컨센서스 검증** — `core/trust/consensus.py`. 같은 콘텐츠를 N개 리뷰어로 교차검증 → 순수 `combine`(보수적 결합: reject 우선·전원 통과여야 passed·score 최댓값·위반 병합 + `agreement` consensus/disagree) + `run`(리뷰어 thunk 실행, 실패는 보수적 review로 격리). 리뷰어·모델 주입(엔진은 youtube·모델수 무지). **정직성**: 원본 `double_check` 소스가 youtube-agent에 부재 → *이식이 아니라 재구성*(단 `agreement` 의미는 실 로그에서 관측, 보수적 결합은 프로젝트 원칙에서 도출). 특성화 12건. 누적 **334 green**
 - [x] **관측 대시(리포트 렌더러)** — `core/observability.py`. 계측 데이터를 사람이 읽는 Markdown으로: `render_cost_report`(CallRecord→호출·비용·**실측/근사 비율**·미가격·티어/모델별 표) + `render_gate_report`(AuditRecord→통과율·권고/합의 분포·점수·**모순 건수**) + `dashboard`(묶음). 순수·결정적 테스트 10건. **실 로그 렌더(🟢)**: 게이트 감사 36건 → 통과율 2.8%·reject35/review1·disagree21/consensus15·모순 7건(score_range)까지 legible. 누적 **355 green**
-- [ ] auto 라우팅 옵트인 · Gemini/OpenAI 실단가 확보(라이브 비용 켜기)
+- [ ] auto 라우팅 옵트인 경로
 - [ ] 발행 전 가드레일 정비
 
 ## ✅ Phase 3 — 두 번째 어댑터 (research/digest) *(완료 2026-07-10)*

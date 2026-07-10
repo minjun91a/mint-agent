@@ -71,7 +71,16 @@ def test_wrap_emits_to_active_observer():
     wrap(_FakeGateway()).complete("", "요약해줘", model="gemini-2.5-flash")
     assert len(records) == 1
     assert records[0].model == "gemini-2.5-flash"     # 명시 모델 그대로(관측 전용, 안 덮음)
-    assert records[0].cost_usd is None                # Gemini 미가격 → 지어내지 않음
+    assert records[0].cost_usd is not None            # 실단가 확보(2026-07-10) → 라이브 비용 켜짐
+
+
+def test_wrap_leaves_unknown_model_unpriced():
+    """단가표에 없는 모델은 여전히 미가격 — 비용을 지어내지 않는다."""
+    records: list[CallRecord] = []
+    set_observer(records.append)
+    wrap(_FakeGateway()).complete("", "요약해줘", model="아직-단가-없는-모델")
+    assert records[0].cost_usd is None
+    assert records[0].in_tokens > 0                   # 토큰·티어는 계속 계측
 
 
 def test_wrap_without_observer_is_silent():

@@ -34,7 +34,7 @@ import math
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from core.llm import LLMGateway, UsageAwareGateway
 
@@ -49,21 +49,47 @@ class Tier(enum.Enum):
     DEEP = "deep"         # 분석/설계/디버그/추론 등 고난도 → 최상위 모델
 
 
-# ── 가격표 · 비용 공식 (운영 claude_runner._PRICING / _estimate_cost 상속) ──────────
-# USD per 1M tokens. 출처: youtube-agent/agents/claude_runner.py (주석 "Anthropic 공시").
-# 공시가는 변동하므로 사용 전 최신 요금으로 검증할 것. 라우터에 주입해 교체 가능.
-DEFAULT_PRICING: dict[str, dict[str, float]] = {
+# ── 가격표 · 비용 공식 ────────────────────────────────────────────────────────────
+# USD per 1M tokens. **모든 값은 프로바이더 공식 문서로 직접 확인함(확인일 2026-07-10).**
+#
+# ⚠️ 이 표는 원래 운영 `claude_runner._PRICING`에서 그대로 상속했고, 주석은 "Anthropic 공시"라며
+# 출처가 있는 값이라고 적어 두었다. 그런데 상속한 `claude-opus-4-7`은 15.00/75.00이었고
+# **실제 공시가는 5.00/25.00**이다(구세대 Opus 4.1의 단가가 남아 있었던 것으로 보인다).
+# 비용을 3배로 과대계상하고 있었다. **출처가 있다는 것과 정확하다는 것은 다르다** — 상속한 수치도
+# 검증 대상이다. 아래 값은 전부 원 출처에서 다시 확인했다.
+#
+#   Claude : claude-api 레퍼런스 모델·가격표 (2026-06-24 기준)
+#   Gemini : https://ai.google.dev/gemini-api/docs/pricing  (유료 티어, 텍스트 입력 기준)
+#   OpenAI : https://developers.openai.com/api/docs/models/gpt-4o-mini
+#
+# 공시가는 변동한다. 라우터에 `pricing`을 주입해 언제든 교체할 수 있다.
+DEFAULT_PRICING: dict[str, dict[str, Any]] = {
+    # ── Anthropic ──
     "claude-haiku-4-5":          {"in": 1.00, "out": 5.00},
     "claude-haiku-4-5-20251001": {"in": 1.00, "out": 5.00},
     "claude-sonnet-4-6":         {"in": 3.00, "out": 15.00},
-    "claude-opus-4-7":           {"in": 15.00, "out": 75.00},
+    # sonnet-5는 2026-08-31까지 인트로 단가($2.00/$10.00)가 적용된다. 만료 후 자동 갱신되지
+    # 않으므로 표준가로 등록한다(그 기간엔 실제보다 높게 잡힌다 — 과소계상보다 안전).
+    "claude-sonnet-5":           {"in": 3.00, "out": 15.00},
+    "claude-opus-4-7":           {"in": 5.00, "out": 25.00},
+    "claude-opus-4-8":           {"in": 5.00, "out": 25.00},
+    # ── Google ──
+    "gemini-2.5-flash":          {"in": 0.30, "out": 2.50},
+    "gemini-2.5-flash-lite":     {"in": 0.10, "out": 0.40},
+    # 2.5-pro는 프롬프트 길이로 단가가 갈린다(200k 토큰 초과 시 인상).
+    "gemini-2.5-pro":            {"in": 1.25, "out": 10.00,
+                                  "long_context": {"threshold_in": 200_000,
+                                                   "in": 2.50, "out": 15.00}},
+    # ── OpenAI ──
+    "gpt-4o-mini":               {"in": 0.15, "out": 0.60},
 }
 
 # 가격표에 없는 모델의 보수적 폴백 단가(원본 _estimate_cost의 기본값과 동일: sonnet급).
-_FALLBACK_PRICE = {"in": 3.00, "out": 15.00}
+_FALLBACK_PRICE: dict[str, Any] = {"in": 3.00, "out": 15.00}
 
 # 기본 라우트 — 위 가격표에 단가가 있는(=출처가 붙은) 모델로만 구성.
-# 최신 세대(claude-opus-4-8 / claude-sonnet-5)로 올리려면 현재가와 함께 route·pricing을 주입.
+# 신모델(opus-4-8 / sonnet-5)도 이제 단가가 있으므로, 라우트를 올리려면 `route`를 주입하면 된다.
+# 기본값을 바꾸는 것은 **동작 변경**이라 여기서 하지 않는다.
 DEFAULT_ROUTE: dict[Tier, str] = {
     Tier.CHEAP: "claude-haiku-4-5-20251001",
     Tier.BALANCED: "claude-sonnet-4-6",
@@ -71,18 +97,31 @@ DEFAULT_ROUTE: dict[Tier, str] = {
 }
 
 
+def _resolve_price(price: dict[str, Any], in_tokens: int) -> dict[str, Any]:
+    """컨텍스트 길이에 따른 단가 선택 (순수). 장문 티어가 없으면 기본 단가 그대로.
+
+    `gemini-2.5-pro`처럼 프롬프트가 임계값을 넘으면 인상되는 모델을 위한 것이다.
+    ⚠️ 입력 토큰이 **근사**(`estimate_tokens`)일 때는 임계값 판정도 근사다 — 실측 usage가
+    있을 때만 정확하다. `CallRecord.token_source`가 그 구분을 남긴다.
+    """
+    long = price.get("long_context")
+    if long and in_tokens > long["threshold_in"]:
+        return long
+    return price
+
+
 def estimate_cost(model: str, in_tokens: int, out_tokens: int, *,
-                  pricing: dict[str, dict[str, float]] = DEFAULT_PRICING) -> float:
+                  pricing: dict[str, dict[str, Any]] = DEFAULT_PRICING) -> float:
     """(입력·출력 토큰, 단가표) → USD 추정. 원본 `_estimate_cost` 공식과 동일.
 
     단가표에 없는 모델은 보수적 폴백가를 쓴다(원본 동작). 단 **모델이 실제로 가격되는지**는
     `is_priced`로 따로 판정한다 — 라우터는 미가격 모델의 비용을 폴백으로 지어내지 않고 비운다.
     """
-    price = pricing.get(model, _FALLBACK_PRICE)
+    price = _resolve_price(pricing.get(model, _FALLBACK_PRICE), in_tokens)
     return (in_tokens * price["in"] + out_tokens * price["out"]) / 1_000_000
 
 
-def is_priced(model: str, pricing: dict[str, dict[str, float]] = DEFAULT_PRICING) -> bool:
+def is_priced(model: str, pricing: dict[str, dict[str, Any]] = DEFAULT_PRICING) -> bool:
     """이 모델의 **실단가가 표에 있는가**. 없으면 비용을 지어내지 않고 미가격(None)으로 둔다."""
     return model in pricing
 
@@ -273,7 +312,7 @@ class CostRouter:
 
     def __init__(self, gateway: LLMGateway, *,
                  route: dict[Tier, str] = DEFAULT_ROUTE,
-                 pricing: dict[str, dict[str, float]] = DEFAULT_PRICING,
+                 pricing: dict[str, dict[str, Any]] = DEFAULT_PRICING,
                  classifier: Callable[..., Classification] = classify,
                  sink: Sink | None = None) -> None:
         self._gw = gateway
