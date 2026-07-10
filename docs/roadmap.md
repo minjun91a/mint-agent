@@ -55,11 +55,22 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 - [ ] auto 라우팅 옵트인 · Gemini/OpenAI 실단가 확보(라이브 비용 켜기)
 - [ ] 발행 전 가드레일 정비
 
-## ⬜ Phase 3 — 두 번째 어댑터 (research/digest)
+## 🔄 Phase 3 — 두 번째 어댑터 (research/digest) *(착수 2026-07-10)*
 
-- [ ] `adapters/research/` (소스 수집 → RAG 요약 → HITL → 발행)
-- [ ] pgvector 도입
-- [ ] **엔진 변경 0으로 어댑터 추가** = 추상화 증명
+- [x] **`produce` 이식** — `adapters/research/`(`_http`·`search`·`fetch`·`summarize`·`adapter`).
+  원본 `youtube-agent/agents/research.py`(DDG 검색 → 본문 페치 → Gemini 출처인용 요약)를 순수/IO로 갈라
+  이식했다. **순수**(DDG 정규식 파싱·리다이렉트 해소·태그 제거·문자 예산 배분·프롬프트 조립)는
+  **원본 parity IDENTICAL**(정규식 6·상수 5·순수함수 4종 대조, `_clean`은 304 fuzz 샘플).
+  **IO**는 `HttpFetcher` 백엔드 주입 — `search`·`fetch` 두 곳이 urlopen을 쓰므로 `_http.py` 공유 seam으로
+  추출(`_ffmpeg.py`와 같은 근거). **LLM**은 `LLMGateway` 주입(`default_gemini()` 조립점 → 관측 자동 승계).
+  `ResearchAdapter`가 `PlatformAdapter` 포트를 만족. **★ 엔진 변경 0줄**(`git diff -- core/` 공백)
+  = [ADR 0003](adr/0003-2번째-어댑터-research.md) 명제 1차 증명. 특성화 53건. 누적 **408 green**
+- [ ] **`review`** — 출처 인용 검증(인용 번호 유효성·발췌에 없는 주장)을 `core.trust.Verdict`로 반환.
+      *여기서 계약 정제가 강제된다*: `PlatformAdapter.review(content, seo)`의 `seo`는 youtube 어휘다
+      (`core/pipeline.py`·`core/trust/verify.py`가 "2번째 어댑터가 강제할 때 정제"라고 예고해 둔 지점)
+- [ ] **`publish`** — 다이제스트 발행 백엔드 주입(youtube publish와 같은 패턴)
+- [ ] pgvector 도입 (RAG)
+- [ ] **엔진 변경 0으로 어댑터 추가** = 추상화 증명 *(produce 구간 달성 · review/publish 남음)*
 
 ## ⬜ Phase 4 — 채용용 마감
 
