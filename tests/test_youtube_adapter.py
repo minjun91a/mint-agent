@@ -83,6 +83,18 @@ def test_gate_holds_on_hard_block():
     assert d.verdict.has_high_severity is True
 
 
+def test_gate_without_context_treats_seo_as_empty():
+    """엔진 계약의 `context`는 optional이다(research는 근거 본문 없이도 검증된다).
+
+    youtube가 `None`을 받으면 빈 SEO 메타로 검사한다 — AI 라벨 누락이 잡혀 HITL 보류.
+    (2번째 어댑터가 `seo` → `context` 정제를 강제하면서 생긴 경로)
+    """
+    d = gate(YouTubeAdapter(review_deep=False), CLEAN_SCRIPT)
+    assert d.proceed is False
+    assert d.verdict.recommendation == "review"
+    assert "ai_labeling" in [v.category for v in d.verdict.violations]
+
+
 # ── 포트 분리 증명: 엔진 gate는 youtube가 아닌 어댑터에도 동작 ──
 
 class _FakeAdapter:

@@ -29,9 +29,13 @@ class YouTubeAdapter:
             "produce 파이프라인은 후속 이식 — story_writer/tts/image_gen/video_builder 모듈 필요"
         )
 
-    def review(self, content: dict, seo: dict) -> Verdict:
-        """발행 전 컴플라이언스 검증 → Verdict."""
-        return self._reviewer.review(content, seo)
+    def review(self, content: dict, seo: dict | None = None) -> Verdict:
+        """발행 전 컴플라이언스 검증 → Verdict.
+
+        엔진 계약(`PlatformAdapter.review`)의 `context`는 optional이므로 `None`이 올 수 있다.
+        youtube에서 그 자리는 SEO 메타이고, 없으면 빈 메타로 검사한다(→ AI 라벨 누락이 잡힌다).
+        """
+        return self._reviewer.review(content, seo or {})
 
     def publish(self, asset: dict) -> dict:
         """asset(dict) → YouTubePublisher로 위임. publisher 미주입 시 명시적 에러."""

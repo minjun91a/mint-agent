@@ -225,8 +225,9 @@ class ComplianceReviewer:
         self.model = model
         self.gateway = gateway
 
-    def review(self, script: dict[str, Any], seo: dict[str, Any]) -> Verdict:
-        return review(script, seo, deep=self.deep, model=self.model, gateway=self.gateway)
+    def review(self, script: dict[str, Any], seo: dict[str, Any] | None = None) -> Verdict:
+        """엔진 계약의 `context`(= youtube에서는 SEO 메타)는 optional이다. 없으면 빈 메타."""
+        return review(script, seo or {}, deep=self.deep, model=self.model, gateway=self.gateway)
 
 
 def format_violations_md(result: Verdict | dict[str, Any]) -> str:

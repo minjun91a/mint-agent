@@ -160,12 +160,14 @@
 | youtube 주입 | `image_gen`(백엔드) · `video_builder` · `tts_engine` · `_ffmpeg`(러너) · `thumbnail_gen`(gen_bg) |
 | youtube 통합 | `review` · `publish` · `adapter` · `control` · `persona` · `orchestrator` |
 | discord | `channels` · `personas` (의존 방향 IO→콘텐츠) |
-| research | `_http` · `search` · `fetch` · `summarize` · `adapter` |
+| research | `_http` · `search` · `fetch` · `summarize` · `review` · `adapter` |
 
 **예측 드릴**
 - `parse_results(html, top_k=0)`이 반환하는 hit 개수는? **왜** 그런가?
 - `build_sources_block`에서 2번 소스의 본문이 빈 문자열이면 3번 소스의 출처 번호는? 왜 다시 매기지 않는가?
+- 위 답과 `review.check_citations`의 `citation_unfetched_source` 규칙을 **연결**해 보라. 왜 그 규칙이 성립하는가?
 - `video_builder`는 실제 ffmpeg 없이 어떻게 테스트되는가?
+- youtube는 high 위반에 `review`를, research는 `reject`를 낸다. 엔진이 안 깨지는 이유는?
 
 **완료 조건**: 세 주입 패턴(**게이트웨이** / **백엔드 콜러블** / **경로·clock·rng**)을 각각 실제 파일로 지목할 수 있다.
 

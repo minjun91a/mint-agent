@@ -75,9 +75,20 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
   **사용자가 리서치 요약으로 `"{}"`를 본다**(재현 확인). `_empty_fallback(json_mode)`로 교정:
   JSON 요청엔 `"{}"`, 산문 요청엔 `""`(원본 research의 `(resp.text or "")`와도 일치).
   **find→fix→verify 루프**(eval 결함 교정 `8fc909f`와 같은 리듬). 특성화 +5. 누적 **413 green**
-- [ ] **`review`** — 출처 인용 검증(인용 번호 유효성·발췌에 없는 주장)을 `core.trust.Verdict`로 반환.
-      *여기서 계약 정제가 강제된다*: `PlatformAdapter.review(content, seo)`의 `seo`는 youtube 어휘다
-      (`core/pipeline.py`·`core/trust/verify.py`가 "2번째 어댑터가 강제할 때 정제"라고 예고해 둔 지점)
+- [x] **`review` — 출처 인용 검증 + 예고된 계약 정제**. `adapters/research/review.py`(`CitationReviewer`).
+  **원본에 대응물 없음 → 신규 구축**(consensus와 같은 정직 표기). 규칙의 근거는 `summarize.SYSTEM_PROMPT`가
+  모델에게 **약속시킨 것들**이다 — *프롬프트가 계약이고, review는 그 계약의 테스트*. 룰 층은 **완전히
+  결정적**(LLM 불필요): `citation_out_of_range`(존재하지 않는 출처 인용=환각) · `citation_unfetched_source`
+  (페치 실패해 요약 입력에 없던 소스를 인용) · `no_citation` · `missing_sources_section`(med) ·
+  `unused_source`(low). `deep=True` + 근거 본문(`context={"bodies":...}`) 주입 시에만 LLM 근거 대조.
+  **정책은 youtube와 다르다**(어댑터 자율): high → `reject`(사람 안 기다림), med/low → `review`, 무위반 → `approve`.
+  **★ 계약 정제 실행**: `PlatformAdapter.review(content, seo)` → `review(content, context=None)`.
+  `core/pipeline.py`·`core/trust/verify.py`가 "2번째 어댑터가 강제할 때 정제한다"고 예고해 둔 지점을 실행 —
+  `seo`는 youtube 어휘였고 리서치엔 SEO가 없다. `context` = "검증에 필요한 부가 자료, 해석은 어댑터의 몫"
+  (youtube=SEO 메타, research=근거 본문). 엔진은 그 안을 보지 않는다. `core/trust/verify.py`는 **한 줄도 안 바뀜**
+  (결과 어휘만 공유하는 얕은 설계가 옳았음을 2번째 어댑터가 검증). **정제의 파장**: `context`가 optional이 되자
+  `gate(adapter, content)`가 가능해졌고 youtube가 `None.get`으로 깨졌다 → 어댑터에서 `seo or {}` 방어 + 회귀 테스트.
+  특성화 +34. 누적 **447 green**
 - [ ] **`publish`** — 다이제스트 발행 백엔드 주입(youtube publish와 같은 패턴)
 - [ ] pgvector 도입 (RAG)
 - [ ] **엔진 변경 0으로 어댑터 추가** = 추상화 증명 *(produce 구간 달성 · review/publish 남음)*

@@ -15,7 +15,8 @@ import pytest
 from adapters.research._http import HttpResponse
 from adapters.research.adapter import NO_HITS, ResearchAdapter
 from adapters.research.search import build_search_url
-from core.pipeline import PlatformAdapter
+from core.pipeline import GateDecision, PlatformAdapter, gate
+from core.trust.verify import Verdict
 
 DDG_FIXTURE = """
 <div><a class="result__a" href="https://a.com/1">Title 1</a>
@@ -69,14 +70,56 @@ def test_research_adapter_satisfies_platform_adapter_port():
     assert isinstance(ResearchAdapter(), PlatformAdapter)
 
 
-def test_review_is_not_implemented_yet():
-    with pytest.raises(NotImplementedError, match="출처 인용 검증"):
-        ResearchAdapter().review({}, {})
-
-
 def test_publish_requires_backend_injection():
     with pytest.raises(NotImplementedError, match="백엔드"):
         ResearchAdapter().publish({})
+
+
+def test_engine_gate_drives_research_adapter():
+    """엔진 발행 게이트가 youtube가 **아닌** 어댑터를 구동한다 — 포트 분리의 최종 증명.
+
+    `gate`는 research를 모르고, `context=None`(근거 본문 없음)이라 룰 인용 검증만 돈다.
+    """
+    clean = {
+        "query": "q",
+        "summary": "- 사실 [출처 1]\n\n## 출처\n1. T1 — https://a.com/1",
+        "hits": [{"title": "T1", "url": "https://a.com/1", "snippet": "s", "fetched_chars": 10}],
+    }
+    decision = gate(ResearchAdapter(review_deep=False), clean)
+
+    assert isinstance(decision, GateDecision)
+    assert decision.proceed is True
+    assert decision.verdict.recommendation == "approve"
+
+
+def test_engine_gate_blocks_hallucinated_citation():
+    """존재하지 않는 출처를 인용하면 엔진 게이트가 발행을 막는다."""
+    bad = {
+        "query": "q",
+        "summary": "- 사실 [출처 7]\n\n## 출처\n1. T1",
+        "hits": [{"title": "T1", "url": "https://a.com/1", "snippet": "s", "fetched_chars": 10}],
+    }
+    decision = gate(ResearchAdapter(review_deep=False), bad)
+
+    assert decision.proceed is False
+    assert decision.verdict.recommendation == "reject"
+    assert "citation_out_of_range" in [v.category for v in decision.verdict.violations]
+
+
+def test_gate_passes_context_through_to_adapter():
+    """엔진은 context를 해석하지 않고 어댑터에 그대로 넘긴다(youtube=seo, research=bodies)."""
+    seen: list = []
+
+    class _SpyAdapter:
+        def produce(self, brief): ...
+        def publish(self, asset): ...
+
+        def review(self, content, context=None):
+            seen.append(context)
+            return Verdict(passed=True, score=0.0, recommendation="approve")
+
+    gate(_SpyAdapter(), {}, {"bodies": ["b1"]})
+    assert seen == [{"bodies": ["b1"]}]
 
 
 # ── produce ────────────────────────────────────────────────────────

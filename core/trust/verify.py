@@ -6,9 +6,11 @@ Trust 레이어 ①(검증/가드레일)의 **공통 어휘**를 정의한다. �
 각자의 규칙으로 Reviewer를 구현하되, 결과는 항상 이 `Verdict` 형태로 돌려준다.
 → 엔진·관측성·HITL은 어댑터 내부를 몰라도 `Verdict` 하나로 일관 처리한다.
 
-적정 고도(브리프 8장): 지금은 어댑터가 youtube 하나뿐이라 `Reviewer.review`의 입력
-시그니처를 강제로 일반화하지 않는다(일반화는 2번째 어댑터가 강제할 때). 지금 공유하는 것은
-'결과 어휘(Verdict/Violation)'까지다.
+**2번째 어댑터가 이 설계를 검증했다(2026-07-10).** research의 `CitationReviewer`는 youtube의
+`ComplianceReviewer`와 **규칙도 정책도 전혀 다르다** — 전자는 인용 무결성을 보고 high 위반 시
+`reject`, 후자는 금지표현·AI 라벨을 보고 위반 시 `review`. 그런데도 이 파일은 한 줄도 바뀌지
+않았다. 공유되는 것은 여전히 '결과 어휘(Verdict/Violation)'까지이고, 그 얕음이 정확했다.
+(입력 시그니처를 일반화한 것은 `core.pipeline` 쪽이다 — `seo` → `context`.)
 """
 from __future__ import annotations
 
