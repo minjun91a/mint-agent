@@ -7,7 +7,7 @@ core.approval 테스트 — HITL 승인 지점(`GateDecision` → 최종 실행 
 """
 from __future__ import annotations
 
-from core.approval import resolve
+from core.approval import console_ask, resolve
 from core.pipeline import GateDecision, gate
 from core.trust.verify import Verdict, Violation
 
@@ -88,3 +88,28 @@ def test_resolve_passes_full_decision_to_ask():
     resolve(decision, ask=lambda d: (captured.append(d), True)[1])
 
     assert captured[0].verdict.violations[0].category == "c"
+
+
+# ── console_ask: 기본(콘솔) 구현 ────────────────────────────────────────
+
+
+def test_console_ask_approves_on_y(capsys):
+    decision = _decision("review", violations=[Violation(category="c", severity="med", detail="d")])
+    approved = console_ask(decision, input_fn=lambda prompt: "y")
+    out = capsys.readouterr().out
+
+    assert approved is True
+    assert "사람 판단 필요" in out
+    assert "[med] c: d" in out
+
+
+def test_console_ask_rejects_on_anything_else():
+    decision = _decision("review")
+    assert console_ask(decision, input_fn=lambda prompt: "") is False
+    assert console_ask(decision, input_fn=lambda prompt: "n") is False
+
+
+def test_console_ask_accepts_uppercase_yes():
+    decision = _decision("review")
+    assert console_ask(decision, input_fn=lambda prompt: "Y") is True
+    assert console_ask(decision, input_fn=lambda prompt: "yes") is True

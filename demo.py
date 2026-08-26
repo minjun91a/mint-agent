@@ -23,7 +23,6 @@ import argparse
 import sys
 import tempfile
 from pathlib import Path
-from typing import Callable
 
 from adapters.manufacturing.adapter import ManufacturingAdapter
 from adapters.manufacturing.analyze import ShipmentChangeTrigger, analyze_shipment_change
@@ -31,10 +30,10 @@ from adapters.manufacturing.erp_data import load_erp_snapshot
 from adapters.research.adapter import ResearchAdapter
 from adapters.research.review import CitationReviewer
 from adapters.youtube.adapter import YouTubeAdapter
-from core.approval import resolve
+from core.approval import console_ask, resolve  # noqa: F401 — 재노출(demo.console_ask), 실행 경로에서는 안 씀
 from core.gateway import default_claude, default_gemini
 from core.observability import render_gate_report
-from core.pipeline import GateDecision, gate, gate_consensus, jsonl_audit_sink
+from core.pipeline import gate, gate_consensus, jsonl_audit_sink
 from core.routing import AUTO, estimate_cost
 from core.trust.eval import load_jsonl
 from core.trust.verify import Verdict
@@ -199,19 +198,6 @@ def demo_audit() -> None:
 # ── 6. 제조 도메인 — 역방향 연쇄 + HITL 승인 ─────────────────────────────────
 
 _MANUFACTURING_DATA = Path(__file__).parent / "data" / "manufacturing"
-
-
-def console_ask(decision: GateDecision, *, input_fn: Callable[[str], str] = input) -> bool:
-    """실제 터미널에서 사람에게 승인을 묻는다 — `core.approval.ApprovalPrompt` 구현체.
-
-    데모의 기본 실행 경로(`demo_manufacturing`)에서는 부르지 않는다 — 입력 대기는 CI·자동 실행을
-    막는다(`tests/test_demo.py`가 모든 데모를 인자 없이 돌린다). 대화형으로 직접 이어붙일 때 쓴다.
-    """
-    v = decision.verdict
-    print(f"\n  ⚠️  사람 판단 필요 — recommendation={v.recommendation}, score={v.score:.2f}")
-    for viol in v.violations:
-        print(f"     └ [{viol.severity}] {viol.category}: {viol.detail}")
-    return input_fn("  승인하시겠습니까? [y/N] ").strip().lower() in ("y", "yes")
 
 
 def demo_manufacturing() -> None:

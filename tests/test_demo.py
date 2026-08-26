@@ -10,8 +10,6 @@ from __future__ import annotations
 import pytest
 
 import demo
-from core.pipeline import gate
-from core.trust.verify import Verdict, Violation
 
 
 def test_every_demo_runs_without_keys_or_network(capsys):
@@ -159,38 +157,7 @@ def test_manufacturing_demo_simulates_both_approval_outcomes(capsys):
     assert "publish=False (source=human_reject)" in out
 
 
-# ── console_ask: 실 콘솔 승인 구현(기본 경로에서는 안 불림) ──────────────
-
-
-class _ReviewStubAdapter:
-    """`test_core_approval.py`와 같은 최소 어댑터 — 고정된 Verdict을 낸다."""
-
-    def __init__(self, verdict: Verdict) -> None:
-        self._verdict = verdict
-
-    def produce(self, brief): ...        # pragma: no cover
-    def publish(self, asset): ...        # pragma: no cover
-
-    def review(self, content, context=None) -> Verdict:
-        return self._verdict
-
-
-def _review_decision(**kwargs):
-    return gate(_ReviewStubAdapter(Verdict(passed=True, score=0.15, recommendation="review",
-                                           **kwargs)), {})
-
-
-def test_console_ask_approves_on_y(capsys):
-    decision = _review_decision(violations=[Violation(category="c", severity="med", detail="d")])
-    approved = demo.console_ask(decision, input_fn=lambda prompt: "y")
-    out = capsys.readouterr().out
-
-    assert approved is True
-    assert "사람 판단 필요" in out
-    assert "[med] c: d" in out
-
-
-def test_console_ask_rejects_on_anything_else():
-    decision = _review_decision()
-    assert demo.console_ask(decision, input_fn=lambda prompt: "") is False
-    assert demo.console_ask(decision, input_fn=lambda prompt: "n") is False
+def test_demo_reexports_console_ask_for_upgrade_path():
+    """`demo.console_ask`는 `core.approval.console_ask` 그 자체다(재노출) — 실행 경로에서 안 쓰인다."""
+    from core.approval import console_ask
+    assert demo.console_ask is console_ask
