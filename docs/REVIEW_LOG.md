@@ -83,3 +83,19 @@
   프롬프트별로 다른 텍스트를 내는 가짜로 교체해 해결(review가 제대로 작동하는 증거로 남김).
 - 생략 사유: 동일. 검증: 테스트 722 green, `python run_manufacturing.py` 수동 실행(키 없이
   reject 확인) + 가짜 게이트웨이로 approve/reject/review 3경로 전부 테스트.
+
+## 2026-08-26 · 트랙 B 생략 — 보조 시나리오(공급사발, 순방향) + 데이터 결함 수정
+
+- **슬라이스 1**: `analyze.py`에 `MaterialDelayTrigger`·`apply_material_delay`·
+  `analyze_material_delay` 추가. 새 계산 로직 없음 — 지연 반영한 스냅샷 위에 기존
+  `analyze_shipment_change`를 재사용(같은 코어가 양방향을 돈다는 D5 증거).
+- **★ 실제로 계산해보고서야 찾은 결함**: P-200/고객사B를 "무관한 대조군"이라고 서사에만
+  써두고 `analyze_shipment_change`로 검증한 적이 없었다. M-01·M-02를 P-100과 공유하는데
+  두 품목 합산 수요를 CSV가 못 채워서, 트리거 없이도 이미 infeasible이었다. `data/manufacturing/
+  inbound_schedule.csv`에 2행 보강(M-01 08-30/1000, M-02 08-29/200) — 주 시나리오
+  숫자(440)는 안 건드림(late_arrivals만 2건으로 늘어남).
+- **슬라이스 2**: `adapter.py`에 `Trigger` 유니언 + `_compute_impact` 분기 한 곳. `publish.py`의
+  `build_meta`를 `content["trigger"]`가 아니라 `content["impact"]`에서만 읽도록 정정
+  (두 번째 트리거 타입엔 `new_ship_date` 필드가 없어서 예전 코드가 깨질 뻔했다).
+- **슬라이스 3**: `demo.py`에 보조 시나리오 섹션 추가(M-04 지연 전/후 feasible 대조).
+- 생략 사유: 동일. 검증: 테스트 730 green, `python demo.py manufacturing` 수동 실행 확인.

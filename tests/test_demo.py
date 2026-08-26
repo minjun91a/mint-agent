@@ -157,6 +157,15 @@ def test_manufacturing_demo_simulates_both_approval_outcomes(capsys):
     assert "publish=False (source=human_reject)" in out
 
 
+def test_manufacturing_demo_shows_secondary_scenario_forward_cascade(capsys):
+    """★ D5 보조 시나리오 — 트리거만 바꿔 순방향도 같은 코어로 돈다(feasible True→False)."""
+    demo.demo_manufacturing()
+    out = capsys.readouterr().out
+    assert "feasible=True" in out
+    assert "feasible=False" in out
+    assert "[M-04] 400개" in out
+
+
 def test_demo_reexports_console_ask_for_upgrade_path():
     """`demo.console_ask`는 `core.approval.console_ask` 그 자체다(재노출) — 실행 경로에서 안 쓰인다."""
     from core.approval import console_ask

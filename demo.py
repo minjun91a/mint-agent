@@ -14,8 +14,8 @@ demo.py — mint-agent를 **API 키 없이** 돌려보는 진입점.
   3. routing   복잡도 비용 라우팅: 쉬운 일에 비싼 모델을 쓰지 않는다 (실단가 기준)
   4. consensus 컨센서스 게이트: 리뷰어가 갈리면 사람에게
   5. audit     게이트 결정 → 감사 로그 → eval 하니스 → 리포트 (루프가 닫힌다)
-  6. manufacturing 제조 역방향 연쇄 + HITL 승인: 출하일 변경 → 부족 자재 산출 →
-                   환각 코드·정보 노출 검증 → 사람 승인/반려 시뮬레이션
+  6. manufacturing 제조 역방향·순방향 연쇄 + HITL 승인: 출하일 변경(역방향)·자재 지연(순방향)
+                   → 부족 자재 산출 → 환각 코드·정보 노출 검증 → 사람 승인/반려 시뮬레이션
 """
 from __future__ import annotations
 
@@ -25,7 +25,12 @@ import tempfile
 from pathlib import Path
 
 from adapters.manufacturing.adapter import ManufacturingAdapter
-from adapters.manufacturing.analyze import ShipmentChangeTrigger, analyze_shipment_change
+from adapters.manufacturing.analyze import (
+    MaterialDelayTrigger,
+    ShipmentChangeTrigger,
+    analyze_material_delay,
+    analyze_shipment_change,
+)
 from adapters.manufacturing.erp_data import load_erp_snapshot
 from adapters.research.adapter import ResearchAdapter
 from adapters.research.review import CitationReviewer
@@ -240,6 +245,21 @@ def demo_manufacturing() -> None:
         print(f"    {label} → publish={outcome.publish} (source={outcome.source})")
 
     print("\n  실전에서는 ask=console_ask로 바꾸면 터미널에서 실제 y/n을 받는다(대화형 전용).")
+
+    # 보조 시나리오(D5) — 공급사발, 순방향 증폭. 트리거 타입만 바꿨다: analyze.py에 새 계산
+    # 로직이 없고(analyze_shipment_change 재사용), adapter.py도 이 데모 코드도 안 바뀐다.
+    print("\n  보조 시나리오 — 공급사발(자재 입고 지연, 순방향):")
+    delay = MaterialDelayTrigger(customer="고객사B", product="P-200", material="M-04",
+                                 original_due_date="2026-08-27", new_due_date="2026-09-10")
+    before = analyze_shipment_change(snapshot, ShipmentChangeTrigger(
+        customer=delay.customer, product=delay.product, new_ship_date="2026-09-05"))
+    after = analyze_material_delay(snapshot, delay)
+    print(f"    지연 전: 고객사B/P-200 → feasible={before.feasible}")
+    print(f"    M-04 입고 {delay.original_due_date} → {delay.new_due_date}로 지연 후:"
+          f" feasible={after.feasible}")
+    for sf in after.shortfalls:
+        print(f"      └ 부족: [{sf.material}] {sf.shortfall}개")
+    print("    같은 analyze_shipment_change가 방향만 바꿔 돈다 — 새 계산 로직을 안 짰다.")
 
 
 DEMOS = {
