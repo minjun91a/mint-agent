@@ -9,13 +9,15 @@ adapters.manufacturing.review — 발행 전 **환각 코드 검증** (produce/*
 `check_citations`와 같은 설계: 사실 문제는 사실 문제로 검증한다).
 
 정책(어댑터 자율, research·youtube와 각각 다름):
-    - 존재하지 않는 코드 인용(high) → `reject`
-    - 초안 누락/미생성(high)        → `reject`
-    - 위반 없음                     → `approve`
+    - 존재하지 않는 코드 인용(high)        → `reject`
+    - 초안 누락/미생성(high)               → `reject`
+    - 고객사 회신에 내부 정보 노출(med)    → `review`(HITL — 환각이 아니라 정책 문제라 사람 판단)
+    - 위반 없음                            → `approve`
 
-🔴 **알려진 한계(다음 슬라이스 후보)**: `draft.py`의 고객사용 프롬프트가 "협력업체명·자재코드를
-고객사에 노출하지 말라"고 지시하지만, 이 리뷰어는 **그 지시를 지켰는지는 검증하지 않는다** —
-지금 검사하는 건 "지어낸 코드가 있는가"뿐이다. 정보 노출 규칙은 별도 카테고리로 추가해야 한다.
+**이전 한계를 닫음(2026-08-26)**: `draft.py`의 고객사용 프롬프트가 "협력업체명·자재코드를
+고객사에 노출하지 말라"고 지시하는데, 처음 버전은 그 지시를 지켰는지 검증하지 않았다.
+`check_customer_leak`이 그 자리를 채운다 — 동시에 이 리뷰어가 `review`(HITL)를 실제로 낼 수
+있는 유일한 경로다(코드 환각은 항상 `reject`, 사람이 개입할 여지가 없었다).
 """
 from __future__ import annotations
 
@@ -65,20 +67,59 @@ def check_draft(label: str, text: str, impact: CascadeImpact) -> list[Violation]
     ]
 
 
+def known_suppliers(impact: CascadeImpact) -> set[str]:
+    """`impact`의 지연 입고 건에 등장하는 협력업체명 (순수) — 고객사 회신에 새면 안 되는 정보."""
+    return {late.supplier for sf in impact.shortfalls for late in sf.late_arrivals}
+
+
+def check_customer_leak(text: str, impact: CascadeImpact) -> list[Violation]:
+    """고객사 회신에 내부 자재코드·협력업체명이 노출됐는지 (순수).
+
+    환각이 아니라 **정보 노출** 정책 위반이라 severity="med" — `reject`가 아니라 사람 판단으로
+    보낸다. 빈 텍스트·게이트웨이 미가용은 `check_draft`가 이미 `draft_missing`(high)으로 잡으므로
+    여기서 중복 신고하지 않는다.
+    """
+    if not text.strip() or text == UNAVAILABLE:
+        return []
+
+    leaked_codes = (known_codes(impact) & set(_CODE.findall(text))) - {impact.shipment.product}
+    leaked_suppliers = {s for s in known_suppliers(impact) if s in text}
+
+    violations: list[Violation] = []
+    if leaked_codes:
+        violations.append(Violation(
+            category="customer_facing_info_leak", severity="med",
+            detail=f"고객사 회신에 내부 자재코드가 노출됐습니다: {sorted(leaked_codes)}"))
+    if leaked_suppliers:
+        violations.append(Violation(
+            category="customer_facing_info_leak", severity="med",
+            detail=f"고객사 회신에 협력업체명이 노출됐습니다: {sorted(leaked_suppliers)}"))
+    return violations
+
+
 def review(content: dict[str, Any]) -> Verdict:
-    """`ManufacturingAdapter.produce()` 결과 → 검증 Verdict. 초안 3종 전부를 대조한다."""
+    """`ManufacturingAdapter.produce()` 결과 → 검증 Verdict. 초안 3종 + 고객 정보 노출을 대조한다."""
     impact: CascadeImpact = content["impact"]
     violations: list[Violation] = [
         v for label, key in _DRAFT_LABELS
         for v in check_draft(label, str(content.get(key, "")), impact)
     ]
+    violations += check_customer_leak(str(content.get("customer_reply", "")), impact)
+
     has_high = any(v.severity == "high" for v in violations)
+    if has_high:
+        recommendation = "reject"
+    elif violations:
+        recommendation = "review"
+    else:
+        recommendation = "approve"
+
     return Verdict(
         passed=not has_high,
         score=min(1.0, len(violations) * 0.15),
         violations=violations,
-        recommendation="reject" if has_high else "approve",
+        recommendation=recommendation,
     )
 
 
-__all__ = ["known_codes", "check_draft", "review"]
+__all__ = ["known_codes", "known_suppliers", "check_draft", "check_customer_leak", "review"]
