@@ -2,9 +2,9 @@
 """
 adapters.manufacturing.adapter — manufacturing 어댑터 (`core.pipeline.PlatformAdapter` 구현).
 
-**세 번째 어댑터.** 이 슬라이스는 `produce`만 배선한다 — `review`(CSV 대조 환각 게이트)·
-`publish`(확정 조정안)는 다음 슬라이스(research·youtube도 같은 순서로 지어졌다: produce가
-먼저, review·publish는 "무엇을 검증/확정할지"가 정해진 뒤).
+**세 번째 어댑터.** `produce`·`review`가 이 슬라이스까지 배선됐다 — `publish`(확정 조정안)는
+다음 슬라이스(research·youtube도 같은 순서로 지어졌다: 무엇을 만들고 검증할지가 먼저 정해진
+뒤에야 "확정"이 의미를 가진다).
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from adapters.manufacturing.draft import (
     draft_supplier_request,
 )
 from adapters.manufacturing.erp_data import ErpSnapshot
+from adapters.manufacturing.review import review as review_drafts
 from core.llm import LLMGateway
 from core.trust.verify import Verdict
 
@@ -49,9 +50,8 @@ class ManufacturingAdapter:
         }
 
     def review(self, content: dict[str, Any], context: Any = None) -> Verdict:
-        raise NotImplementedError(
-            "manufacturing review 미배선 — 다음 슬라이스(CSV 대조 환각 게이트)"
-        )
+        """초안 3종 → 환각 코드 검증 Verdict. LLM 불필요, 완전히 결정적(`review.py`)."""
+        return review_drafts(content)
 
     def publish(self, asset: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError("manufacturing publish 미배선 — 다음 슬라이스")

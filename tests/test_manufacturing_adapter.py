@@ -62,9 +62,23 @@ def test_produce_calls_gateway_three_times_with_distinct_contracts():
     assert len(set(gw.calls)) == 3   # 조정안·협력업체·고객사 — 셋 다 다른 system prompt
 
 
-def test_review_not_yet_wired():
-    with pytest.raises(NotImplementedError, match="review"):
-        _adapter().review({})
+def test_review_approves_clean_drafts():
+    """가짜 게이트웨이가 낸 "초안" 텍스트엔 코드가 없으니 위반이 없다."""
+    decision = _adapter().review(_adapter().produce(TRIGGER))
+    assert decision.recommendation == "approve"
+
+
+def test_review_rejects_hallucinated_code():
+    class _HallucinatingGateway(_FakeGateway):
+        def complete(self, system: str, prompt: str, **kwargs) -> str:
+            super().complete(system, prompt, **kwargs)
+            return "협력사 재고를 보니 M-99가 급히 필요합니다."   # 존재하지 않는 자재코드
+
+    adapter = _adapter(_HallucinatingGateway())
+    decision = adapter.review(adapter.produce(TRIGGER))
+
+    assert decision.recommendation == "reject"
+    assert "unknown_code_reference" in [v.category for v in decision.violations]
 
 
 def test_publish_not_yet_wired():
