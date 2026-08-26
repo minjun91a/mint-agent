@@ -16,13 +16,16 @@ from pathlib import Path
 import pytest
 
 from adapters.manufacturing.adapter import ManufacturingAdapter
-from adapters.manufacturing.analyze import ShipmentChangeTrigger
+from adapters.manufacturing.analyze import MaterialDelayTrigger, ShipmentChangeTrigger
 from adapters.manufacturing.erp_data import load_erp_snapshot
 from adapters.manufacturing.publish import FileConfirmationSink, ManufacturingPublisher
 from core.pipeline import PlatformAdapter, gate
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "manufacturing"
 TRIGGER = ShipmentChangeTrigger(customer="고객사A", product="P-100", new_ship_date="2026-08-28")
+MATERIAL_DELAY_TRIGGER = MaterialDelayTrigger(customer="고객사B", product="P-200", material="M-04",
+                                              original_due_date="2026-08-27",
+                                              new_due_date="2026-09-10")
 
 
 class _FakeGateway:
@@ -131,3 +134,27 @@ def test_gate_blocks_publish_on_hallucinated_code(tmp_path: Path):
     assert decision.proceed is False
     assert decision.verdict.recommendation == "reject"
     assert list(tmp_path.glob("*.md")) == []   # 발행되지 않았다
+
+
+# ── 보조 시나리오: 공급사발 트리거도 같은 어댑터로 돈다 ───────────────
+
+
+def test_produce_accepts_material_delay_trigger_too():
+    """★ D5 보조 시나리오 증거 — 트리거 타입만 바꿨다. adapter.py 코드는 안 바뀐다."""
+    out = _adapter().produce(MATERIAL_DELAY_TRIGGER)
+
+    assert out["impact"].shortfalls[0].material == "M-04"
+    assert out["adjustment_plan"] == "초안"
+
+
+def test_material_delay_trigger_roundtrips_through_gate_and_publish(tmp_path: Path):
+    adapter = _adapter(publisher=ManufacturingPublisher(
+        FileConfirmationSink(tmp_path), clock=lambda: "2026-08-26T09:00:00"))
+
+    produced = adapter.produce(MATERIAL_DELAY_TRIGGER)
+    decision = gate(adapter, produced)
+    assert decision.proceed is True
+
+    out = adapter.publish(produced)
+    doc = Path(out["location"]).read_text(encoding="utf-8")
+    assert "M-04" in doc

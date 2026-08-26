@@ -42,17 +42,22 @@ def _slug(text: str) -> str:
 
 
 def build_meta(content: dict[str, Any], *, generated_at: str) -> dict[str, Any]:
-    """`ManufacturingAdapter.produce()` 결과 → 발행 메타 (순수)."""
+    """`ManufacturingAdapter.produce()` 결과 → 발행 메타 (순수).
+
+    전부 `impact`에서만 읽는다 — `content["trigger"]`는 안 본다. 트리거 타입이 둘로 늘면서
+    (`ShipmentChangeTrigger`·`MaterialDelayTrigger`) `trigger.new_ship_date`가 항상 있다는
+    가정이 깨졌다 — `CascadeImpact`는 어느 트리거든 항상 이 필드들을 갖는다(공통 계약).
+    """
     impact = content["impact"]
-    trigger = content["trigger"]
+    s = impact.shipment
     return {
         "generated_at": generated_at,
-        "customer": trigger.customer,
-        "product": trigger.product,
-        "new_ship_date": trigger.new_ship_date,
+        "customer": s.customer,
+        "product": s.product,
+        "new_ship_date": impact.new_ship_date,
         "feasible": impact.feasible,
         "shortfall_count": len(impact.shortfalls),
-        "slug": f"{trigger.new_ship_date}-{_slug(trigger.customer)}-{_slug(trigger.product)}",
+        "slug": f"{impact.new_ship_date}-{_slug(s.customer)}-{_slug(s.product)}",
     }
 
 
