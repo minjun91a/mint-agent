@@ -37,3 +37,11 @@
   기대한 2건 중 1건만 검출). `\b` 대신 lookaround(`(?<![A-Za-z0-9])...(?!\d)`)로 교체해 해결,
   회귀 테스트로 고정.
 - **검증**: 테스트 683 green.
+
+## 2026-08-26 · 트랙 B 생략 — manufacturing 슬라이스 ⑥⑦ (publish)
+
+- **슬라이스**: `publish.py`(확정 문서 렌더+발행) + `adapter.py` publish 배선 + 3단 관통 테스트 —
+  261줄/2파일, 71줄/2파일로 2커밋 분할(상한 이내씩).
+- **생략 사유**: 동일(표준화된 방침 유지).
+- **produce·review·publish 3단 전부 완성** — `ManufacturingAdapter`가 `PlatformAdapter`를
+  완전히 만족한다. 결함 없이 첫 실행에 테스트 전부 통과(694 green).
