@@ -2,9 +2,7 @@
 """
 adapters.manufacturing.adapter — manufacturing 어댑터 (`core.pipeline.PlatformAdapter` 구현).
 
-**세 번째 어댑터.** `produce`·`review`가 이 슬라이스까지 배선됐다 — `publish`(확정 조정안)는
-다음 슬라이스(research·youtube도 같은 순서로 지어졌다: 무엇을 만들고 검증할지가 먼저 정해진
-뒤에야 "확정"이 의미를 가진다).
+**세 번째 어댑터.** produce·review·publish 3단이 모두 배선됐다.
 """
 from __future__ import annotations
 
@@ -18,6 +16,7 @@ from adapters.manufacturing.draft import (
     draft_supplier_request,
 )
 from adapters.manufacturing.erp_data import ErpSnapshot
+from adapters.manufacturing.publish import ManufacturingPublisher
 from adapters.manufacturing.review import review as review_drafts
 from core.llm import LLMGateway
 from core.trust.verify import Verdict
@@ -28,10 +27,12 @@ class ManufacturingAdapter:
     IO는 호출부가 `load_erp_snapshot`으로 미리 해서 넘긴다, 어댑터는 스냅샷을 모른 채 재사용만)."""
 
     def __init__(self, snapshot: ErpSnapshot, *, model: str = _DEFAULT_MODEL,
-                 gateway: LLMGateway | None = None) -> None:
+                 gateway: LLMGateway | None = None,
+                 publisher: ManufacturingPublisher | None = None) -> None:
         self._snapshot = snapshot
         self._model = model
         self._gateway = gateway
+        self._publisher = publisher
 
     def produce(self, brief: ShipmentChangeTrigger) -> dict[str, Any]:
         """트리거(고객사발 출하일 변경) → 연쇄 영향 + 3종 초안.
@@ -54,7 +55,16 @@ class ManufacturingAdapter:
         return review_drafts(content)
 
     def publish(self, asset: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("manufacturing publish 미배선 — 다음 슬라이스")
+        """승인된 조정안 → 확정 발행. publisher 미주입 시 명시적 에러.
+
+        발행은 되돌리기 어려운 외부 행위다. 기본 sink를 몰래 만들지 않고 **명시적 배선을
+        요구**한다(research publish와 같은 규약).
+        """
+        if self._publisher is None:
+            raise NotImplementedError(
+                "manufacturing publish 백엔드 미배선 — ManufacturingPublisher(sink)를 주입하라"
+            )
+        return self._publisher.publish(asset)
 
 
 __all__ = ["ManufacturingAdapter"]
