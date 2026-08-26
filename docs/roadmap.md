@@ -167,11 +167,17 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 > 폭로했다(산문 경로 JSON 폴백 누수 `c3a30d1` · `review`의 youtube 어휘 `6854f19`). 예고해 둔 자리에서만
 > 계약이 정제됐다는 것이 설계가 옳았다는 증거다.
 
-## ⬜ 리뷰 라운드 — 개발 완료 후 순차 코드 리뷰 *(Phase 3 완주 시 발동)*
+## ⬜ 리뷰 라운드 — 개발 완료 후 순차 코드 리뷰 *(발동 조건 충족, 재개는 보류 — 2026-08-26)*
 
 - [ ] R0 지도 그리기(`CODE_MAP.md`) · R1 계약 계층 · R2 프로바이더·비용 · R3 엔진 메커니즘 ·
       R4 신뢰 레이어 · R5 어댑터 · R6 보완 → 통과 후 **push**
 - 프로토콜·예측 드릴·기록 형식 → [review-roadmap.md](review-roadmap.md)
+
+> **경과(2026-08-26)**: 원래 발동 조건은 "Phase 3 완주 시"였고, 그 뒤 한 차례 "지금부터"로
+> 앞당겼다가(사용자 결정), 제조 도메인 데모 착수 시 다시 "Phase 5 완료 후"로 미뤘다. **Phase 5가
+> 이제 완료됐다** — 그런데도 사용자가 개발을 좀 더 이어가기로 하고 R0 재개는 보류했다. `docs/
+> CODE_MAP.md`는 이미 일부 작성돼 있다(R0은 사용자 단독 작성, 에이전트 개입 금지 — R0~R6 진행표는
+> [review-roadmap.md](review-roadmap.md) 참조).
 
 ## 🔄 Phase 4 — 채용용 마감 *(착수 2026-07-10)*
 
@@ -193,3 +199,46 @@ mint-agent의 Phase 진행을 추적하는 **단일 출처**. "지금 어디까�
 
 > **데모 GIF 대신 실제 출력 캡처.** GIF는 생성 도구 설치가 필요하고, 코드가 바뀌면 조용히 낡는다.
 > 텍스트 출력은 GitHub에서 검색·복붙되고, **CI가 그 출력을 매번 검증**한다(`tests/test_demo.py`).
+
+## ✅ Phase 5 — 제조 도메인 데모 *(완료 2026-08-26. = 개발 완료 기준, D4·D5)*
+
+> [PROJECT_NORTH_STAR.md](../PROJECT_NORTH_STAR.md) D5 시나리오(고객사 출하일 앞당김 → 역방향
+> 연쇄 분석 → 환각 감지 → HITL 승인 + 보조: 자재 지연 → 순방향 증폭)가 여기서 엔드투엔드로 돈다.
+
+- [x] **모의 ERP 데이터** — `data/manufacturing/*.csv` 5개(`bom`·`inbound_schedule`·
+  `production_plan`·`production_actual`·`shipment_plan`). 익명 코드(P-100·M-01 등), 실제
+  업무 플로우(BOM→입고→생산계획→완성수량→출하계획서) 반영. 주 시나리오(고객사A·P-100, 3일
+  앞당김 → M-01 440개 부족)와 보조 시나리오(고객사B·P-200)를 한 세트에 같이 담음.
+- [x] **`adapters/manufacturing/`** — produce·review·publish 3단, `PlatformAdapter` 완전 구현.
+  - `erp_data.py`: CSV → 구조화 레코드(순수/IO 분리, `utf-8-sig`로 Excel BOM 흡수).
+  - `analyze.py`: **역방향**(`ShipmentChangeTrigger`→`analyze_shipment_change`, 남은 생산량→BOM
+    전개→자재별 부족분 산수) + **순방향**(`MaterialDelayTrigger`→`analyze_material_delay`, 새
+    계산 로직 없이 지연 반영 스냅샷 위에서 같은 함수 재사용). **수량은 전부 코드가 확정** —
+    LLM에 계산을 맡기지 않는 게 환각 방지의 핵심 설계.
+  - `draft.py`: 조정안·협력업체 요청·고객사 회신 3종을 **독립 호출**(통합 1회 호출 대신 —
+    대상 독자·톤·허용 정보 범위가 달라 계약을 하나로 합치면 뭉개짐 + 실패 격리).
+  - `review.py`: 환각 코드 검증(`unknown_code_reference`, high→reject) + 고객 정보 노출 검증
+    (`customer_facing_info_leak`, med→**review**, 유일한 HITL 발생 경로). LLM 불필요, 결정적.
+  - `publish.py`: 확정 문서 렌더 + `FileConfirmationSink`(경로 주입, 덮어쓰기 안전).
+- [x] **HITL 승인 배선** — `core/approval.py`(`resolve`, `console_ask`). `GateDecision.
+  requires_human`이 표현까지만 되고 그 다음이 비어 있던 지점(`docs/metrics.md`)을 채움.
+  어댑터 무관 엔진 레벨 모듈 — youtube·research도 같은 함수를 쓸 수 있다.
+- [x] **엔드투엔드 실행 진입점** — `run_manufacturing.py`. `demo.py`(키 없이 도는 조각만)와
+  달리 produce→gate→(필요시 사람 승인)→publish **전 구간을 실제로** 돈다. 키 없으면 안전
+  reject(크래시 없음), 사람 승인이 필요할 때만 실제 터미널 입력을 받는다.
+- [x] **보조 시나리오** — 트리거 타입만 교체(`MaterialDelayTrigger`)해서 같은 코어가 순방향도
+  돈다. `analyze.py`에 새 계산 로직 0줄, `draft.py`·`review.py`·`publish.py` 무변경 —
+  "어댑터 설계가 옳다"는 D5의 증명 조건 충족.
+
+> **★ 실행하며 찾은 결함 3건(find→fix→verify)**:
+> ① 코드 탐지 정규식이 `\b`(유니코드 단어경계)를 써서 "M-99를"처럼 코드 뒤에 한국어 조사가
+> 붙으면 매치 실패 — 한국어 도메인이라 바로 드러난 결함, lookaround로 교체.
+> ② Windows 콘솔에서 `log.warning`이 cp949로 깨짐 — `demo.py`는 produce를 안 불러 한 번도
+> 안 밟았던 경로. stdout뿐 아니라 stderr도 UTF-8 reconfigure하도록 수정.
+> ③ **가장 중요**: P-100·P-200이 자재(M-01·M-02)를 공유하는데, 최초 CSV는 두 품목 합산
+> 수요를 못 채워 P-200이 트리거 없이도 이미 infeasible이었다 — "무관한 대조군"이라고 서사만
+> 쓰고 실제로 `analyze_shipment_change`를 돌려 검증한 적이 없었던 것. 데이터 보강으로 교정.
+>
+> 커밋: `d79bd23`~`5338b65`(manufacturing 어댑터 ①~⑦, HITL, e2e 진입점, 보조 시나리오).
+> 테스트 641 → **730 green**. 트랙 B(diff 리뷰) 예측 질문은 사용자 결정으로 매 라운드 생략,
+> [REVIEW_LOG.md](REVIEW_LOG.md)에 전부 기록.
