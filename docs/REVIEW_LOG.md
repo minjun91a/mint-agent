@@ -54,3 +54,14 @@
   전부 같은 `resolve()`를 쓴다. 실제 입출력(콘솔 input 등)은 의도적으로 넣지 않음 — 그건
   다음 슬라이스(CLI 배선)의 몫.
 - **생략 사유**: 동일(표준화된 방침 유지). 검증: 테스트 699 green.
+
+## 2026-08-26 · 트랙 B 생략 — review.py 확장 + demo.py CLI 배선
+
+- **슬라이스 1**: `review.py`에 `check_customer_leak`(med, 고객사 회신 내부정보 노출) 추가 —
+  이전 라운드가 남긴 "정보 노출 미검증" 한계를 닫음. 동시에 이 리뷰어가 `review`(HITL)를
+  낼 수 있는 유일한 경로가 됨(코드 환각은 항상 high→reject). 124줄/2파일, 테스트 8건.
+- **슬라이스 2**: `demo.py`에 `manufacturing` 데모(6번째) + `console_ask` 추가.
+  `console_ask`(실 `input()` 사용)는 **기본 실행 경로에서 안 부른다** — CI가 인자 없이 모든
+  데모를 도는데 blocking input은 그걸 멈추게 한다. 대신 `core.approval.resolve`를
+  승인/반려 두 결과로 시뮬레이션. 142줄/2파일, 테스트 6건.
+- **생략 사유**: 동일. 검증: 테스트 713 green, `python demo.py manufacturing` 수동 실행 확인.

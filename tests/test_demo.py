@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 
 import demo
+from core.pipeline import gate
+from core.trust.verify import Verdict, Violation
 
 
 def test_every_demo_runs_without_keys_or_network(capsys):
@@ -30,7 +32,7 @@ def test_main_runs_all_demos_by_default(capsys):
     assert demo.main([]) == 0
     out = capsys.readouterr().out
     for heading in ("발행 게이트", "환각 인용 검증", "복잡도 비용 라우팅",
-                    "컨센서스 게이트", "감사 루프"):
+                    "컨센서스 게이트", "감사 루프", "제조 도메인"):
         assert heading in out
 
 
@@ -122,3 +124,73 @@ def test_audit_demo_promotes_only_the_rule_that_stands_alone(capsys):
 def test_audit_demo_reports_no_float_noise(capsys):
     demo.demo_audit()
     assert "0.44999" not in capsys.readouterr().out
+
+
+def test_manufacturing_demo_finds_only_m01_short(capsys):
+    demo.demo_manufacturing()
+    out = capsys.readouterr().out
+    assert "M-01" in out and "440개" in out
+
+
+def test_manufacturing_demo_distinguishes_hallucination_from_info_leak(capsys):
+    """환각 코드는 reject, 정보 노출은 review — 같은 '위반'이어도 정책이 다르다."""
+    demo.demo_manufacturing()
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    hallucinated = next(l for l in lines if "환각 코드" in l)
+    leaked = next(l for l in lines if "내부정보 노출" in l)
+    assert "reject" in hallucinated
+    assert "review" in leaked
+
+
+def test_manufacturing_demo_never_calls_blocking_input(capsys, monkeypatch):
+    """기본 실행 경로는 사람 입력을 기다리면 안 된다(CI가 인자 없이 모든 데모를 돈다)."""
+    def _boom(*args, **kwargs):
+        raise AssertionError("demo_manufacturing이 실제 input()을 불렀다")
+
+    monkeypatch.setattr("builtins.input", _boom)
+    demo.demo_manufacturing()   # 예외 없이 끝나야 한다
+
+
+def test_manufacturing_demo_simulates_both_approval_outcomes(capsys):
+    demo.demo_manufacturing()
+    out = capsys.readouterr().out
+    assert "publish=True (source=human_approve)" in out
+    assert "publish=False (source=human_reject)" in out
+
+
+# ── console_ask: 실 콘솔 승인 구현(기본 경로에서는 안 불림) ──────────────
+
+
+class _ReviewStubAdapter:
+    """`test_core_approval.py`와 같은 최소 어댑터 — 고정된 Verdict을 낸다."""
+
+    def __init__(self, verdict: Verdict) -> None:
+        self._verdict = verdict
+
+    def produce(self, brief): ...        # pragma: no cover
+    def publish(self, asset): ...        # pragma: no cover
+
+    def review(self, content, context=None) -> Verdict:
+        return self._verdict
+
+
+def _review_decision(**kwargs):
+    return gate(_ReviewStubAdapter(Verdict(passed=True, score=0.15, recommendation="review",
+                                           **kwargs)), {})
+
+
+def test_console_ask_approves_on_y(capsys):
+    decision = _review_decision(violations=[Violation(category="c", severity="med", detail="d")])
+    approved = demo.console_ask(decision, input_fn=lambda prompt: "y")
+    out = capsys.readouterr().out
+
+    assert approved is True
+    assert "사람 판단 필요" in out
+    assert "[med] c: d" in out
+
+
+def test_console_ask_rejects_on_anything_else():
+    decision = _review_decision()
+    assert demo.console_ask(decision, input_fn=lambda prompt: "") is False
+    assert demo.console_ask(decision, input_fn=lambda prompt: "n") is False

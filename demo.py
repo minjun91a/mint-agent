@@ -14,6 +14,8 @@ demo.py — mint-agent를 **API 키 없이** 돌려보는 진입점.
   3. routing   복잡도 비용 라우팅: 쉬운 일에 비싼 모델을 쓰지 않는다 (실단가 기준)
   4. consensus 컨센서스 게이트: 리뷰어가 갈리면 사람에게
   5. audit     게이트 결정 → 감사 로그 → eval 하니스 → 리포트 (루프가 닫힌다)
+  6. manufacturing 제조 역방향 연쇄 + HITL 승인: 출하일 변경 → 부족 자재 산출 →
+                   환각 코드·정보 노출 검증 → 사람 승인/반려 시뮬레이션
 """
 from __future__ import annotations
 
@@ -21,13 +23,18 @@ import argparse
 import sys
 import tempfile
 from pathlib import Path
+from typing import Callable
 
+from adapters.manufacturing.adapter import ManufacturingAdapter
+from adapters.manufacturing.analyze import ShipmentChangeTrigger, analyze_shipment_change
+from adapters.manufacturing.erp_data import load_erp_snapshot
 from adapters.research.adapter import ResearchAdapter
 from adapters.research.review import CitationReviewer
 from adapters.youtube.adapter import YouTubeAdapter
+from core.approval import resolve
 from core.gateway import default_claude, default_gemini
 from core.observability import render_gate_report
-from core.pipeline import gate, gate_consensus, jsonl_audit_sink
+from core.pipeline import GateDecision, gate, gate_consensus, jsonl_audit_sink
 from core.routing import AUTO, estimate_cost
 from core.trust.eval import load_jsonl
 from core.trust.verify import Verdict
@@ -189,12 +196,73 @@ def demo_audit() -> None:
     print("  이제 물을 수 있다 — 단, 함께 뜬 규칙을 승격 후보로 착각하지 않는다(단독 열).")
 
 
+# ── 6. 제조 도메인 — 역방향 연쇄 + HITL 승인 ─────────────────────────────────
+
+_MANUFACTURING_DATA = Path(__file__).parent / "data" / "manufacturing"
+
+
+def console_ask(decision: GateDecision, *, input_fn: Callable[[str], str] = input) -> bool:
+    """실제 터미널에서 사람에게 승인을 묻는다 — `core.approval.ApprovalPrompt` 구현체.
+
+    데모의 기본 실행 경로(`demo_manufacturing`)에서는 부르지 않는다 — 입력 대기는 CI·자동 실행을
+    막는다(`tests/test_demo.py`가 모든 데모를 인자 없이 돌린다). 대화형으로 직접 이어붙일 때 쓴다.
+    """
+    v = decision.verdict
+    print(f"\n  ⚠️  사람 판단 필요 — recommendation={v.recommendation}, score={v.score:.2f}")
+    for viol in v.violations:
+        print(f"     └ [{viol.severity}] {viol.category}: {viol.detail}")
+    return input_fn("  승인하시겠습니까? [y/N] ").strip().lower() in ("y", "yes")
+
+
+def demo_manufacturing() -> None:
+    _title(6, "제조 도메인 — 출하일 변경의 역방향 연쇄 + HITL 승인")
+
+    snapshot = load_erp_snapshot(_MANUFACTURING_DATA)
+    trigger = ShipmentChangeTrigger(customer="고객사A", product="P-100", new_ship_date="2026-08-28")
+    impact = analyze_shipment_change(snapshot, trigger)
+
+    print(f"  고객사A: P-100 출하 {impact.shipment.ship_date} → {impact.new_ship_date} "
+          f"({impact.days_pulled_forward}일 앞당김)")
+    for sf in impact.shortfalls:
+        late = ", ".join(f"{l.due_date} {l.qty}개" for l in sf.late_arrivals)
+        print(f"    └ 부족: [{sf.material}] {sf.shortfall}개 (지연 입고: {late})")
+
+    # 아래 3케이스는 초안을 손으로 채운다(citation 데모와 같은 이유) — LLM 호출은 키가 필요하다.
+    adapter = ManufacturingAdapter(snapshot)
+    clean = {
+        "impact": impact,
+        "adjustment_plan": "M-01 자재 440개 부족 — 협력사A에 긴급 요청 필요.",
+        "supplier_request": "M-01 자재를 2026-08-28까지 440개 추가 요청드립니다.",
+        "customer_reply": "출하 일정을 검토 중입니다. 곧 회신드리겠습니다.",
+    }
+    hallucinated = {**clean, "supplier_request": "M-99도 같이 요청해야 합니다."}
+    leaky = {**clean, "customer_reply": "협력사A의 M-01 자재가 부족해 조율 중입니다."}
+
+    print()
+    for name, content in (("정상 초안", clean), ("환각 코드(M-99)", hallucinated),
+                          ("고객에 내부정보 노출", leaky)):
+        d = gate(adapter, content)
+        flag = "발행 진행" if d.proceed else ("사람 판단 대기" if d.requires_human else "거절")
+        print(f"  {name:20s} → {d.verdict.recommendation:8s} {flag}")
+
+    print("\n  '고객에 내부정보 노출'만 review다 — 환각이 아니라 정책 문제라 사람이 최종 판단한다.")
+    print("  HITL 승인(core.approval.resolve) — 실제 입력 대신 두 결과를 시뮬레이션:")
+
+    leak_decision = gate(adapter, leaky)
+    for label, ask in (("사람이 승인", lambda d: True), ("사람이 반려", lambda d: False)):
+        outcome = resolve(leak_decision, ask=ask)
+        print(f"    {label} → publish={outcome.publish} (source={outcome.source})")
+
+    print("\n  실전에서는 ask=console_ask로 바꾸면 터미널에서 실제 y/n을 받는다(대화형 전용).")
+
+
 DEMOS = {
     "gate": demo_gate,
     "citation": demo_citation,
     "routing": demo_routing,
     "consensus": demo_consensus,
     "audit": demo_audit,
+    "manufacturing": demo_manufacturing,
 }
 
 
