@@ -1,7 +1,7 @@
 # 실측 지표 (Metrics)
 
 > 이 문서의 모든 숫자는 **직접 측정한 값**이다. 측정 명령을 함께 적어 두었으니 재현할 수 있다.
-> 측정일: 2026-07-10 (커밋 `f73c180` 기준)
+> 측정일: 2026-07-10 (커밋 `f73c180` 기준) · **갱신: 2026-08-26 (커밋 `d985d77`, Phase 5 반영)**
 
 ---
 
@@ -9,17 +9,21 @@
 
 | 항목 | 값 | 측정 방법 |
 |---|---:|---|
-| 테스트 | **641 green** | `python -m pytest` |
-| 엔진 `core/` | 16 파일 · 2,528 줄 | `find core -name '*.py' \| wc -l` |
-| 어댑터 `adapters/` | 29 파일 · 3,652 줄 | `find adapters -name '*.py' \| wc -l` |
-| 테스트 `tests/` | 36 파일 · 6,296 줄 | `find tests -name '*.py' \| wc -l` |
-| 테스트 : 프로덕션 코드 비율 | **약 1 : 1** | 6,296 / (2,528 + 3,652) |
-| 커밋 | 60 | `git rev-list --count HEAD` |
+| 테스트 | **730 green** | `python -m pytest` |
+| 엔진 `core/` | 17 파일 · 2,601 줄 | `find core -name '*.py' \| wc -l` |
+| 어댑터 `adapters/` | 36 파일 · 4,461 줄 | `find adapters -name '*.py' \| wc -l` |
+| 테스트 `tests/` | 44 파일 · 7,453 줄 | `find tests -name '*.py' \| wc -l` |
+| 테스트 : 프로덕션 코드 비율 | **약 1 : 1** | 7,453 / (2,601 + 4,461) |
+| 커밋 | 79 | `git rev-list --count HEAD` |
 | LLM 프로바이더 | 3 (Gemini · OpenAI · Claude) | `core/llm.py` |
-| 플랫폼 어댑터 | 3 (youtube · research · discord) | `adapters/` |
+| 플랫폼 어댑터 | 4 (youtube · research · discord · manufacturing) | `adapters/` |
+| 실행 진입점 | 2 (`demo.py` 302줄 · `run_manufacturing.py` 109줄) | `wc -l demo.py run_manufacturing.py` |
+
+*(2026-07-10 측정치: 테스트 641 · 엔진 16파일/2,528줄 · 어댑터 29파일/3,652줄 · 테스트 36파일/6,296줄 ·
+커밋 60. 증가분은 전부 Phase 5(제조 도메인 데모) — 아래 참조.)*
 
 **테스트는 외부 SDK·네트워크·API 키 없이 전부 돈다.** 프로바이더 SDK(`google-generativeai`·
-`openai`·`anthropic`·`psycopg`)를 import 차단한 상태에서 641건이 그대로 통과한다 —
+`openai`·`anthropic`·`psycopg`)를 import 차단한 상태에서 730건이 그대로 통과한다 —
 모든 외부 경계가 주입 지점이기 때문이다. CI가 매 push마다 Python 3.12·3.13·3.14에서 확인한다
 (개발 환경이 3.14다 — 매트릭스에서 빼 두었다가 argparse 동작 차이를 CI에서야 발견한 적이 있다).
 
@@ -38,6 +42,19 @@ git show --stat 38473b5 -- core/    # 출력 없음
 (`review(content, seo)` → `review(content, context)` — `seo`는 youtube 어휘였다).
 `core/trust/verify.py`는 끝까지 한 줄도 바뀌지 않았다: youtube와 research는 검증 **규칙도
 정책도** 다르지만(전자는 위반 시 `review`, 후자는 `reject`) 결과 어휘만 공유한다.
+
+**세 번째 어댑터(manufacturing, 도메인은 제조 공정관리)는 기존 엔진 파일을 단 한 줄도
+바꾸지 않았다** — 두 번째 때보다 더 깨끗하다(예고된 계약 정제조차 없었다).
+
+```bash
+git diff --stat d79bd23^..5338b65 -- core/
+#  core/approval.py | 73 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#  1 file changed, 73 insertions(+)
+```
+
+유일한 `core/` 변화는 **새 파일 추가**(`core/approval.py`, HITL 승인 로직)이지 기존 코드
+수정이 아니다 — 기존 16개 엔진 파일 중 어느 것도 diff에 안 나온다. 그리고 그 새 파일조차
+어댑터 전용이 아니다: youtube·research도 같은 `resolve()`를 그대로 쓸 수 있다.
 
 ---
 
@@ -66,7 +83,7 @@ python demo.py routing    # 위 표를 직접 출력한다
 ## 신뢰 레이어가 실제로 잡은 것
 
 정답 라벨 없이 품질을 재는 두 가지 방법(자체 모순 감사 · 컨센서스 불일치)과, 그 결과 **찾아서
-고친 결함 여섯 건.** 전부 재현 → 교정 → 회귀 테스트 순으로 닫았다.
+고친 결함 아홉 건.** 전부 재현 → 교정 → 회귀 테스트 순으로 닫았다.
 
 | # | 결함 | 어떻게 찾았나 | 실제 영향 | 커밋 |
 |---|---|---|---|---|
@@ -76,6 +93,9 @@ python demo.py routing    # 위 표를 직접 출력한다
 | 4 | 조립점의 세 팩토리가 전부 Claude 라우트를 씀 | `auto` 옵트인을 열며 재현 | `default_gemini()`가 **Claude 모델명을 Gemini SDK로** 넘김 | `8ea987f` |
 | 5 | `context`를 optional로 넓히자 youtube가 `None.get`으로 깨짐 | 계약 정제 직후 재현 | `gate(adapter, content)` 호출 시 예외 | `6854f19` |
 | 6 | 감사 로그가 위반 **개수**만 남기고 **카테고리**를 버림 | "검출 패턴 → 규칙 후보"를 만들려다 스키마에서 막힘 | *어떤 규칙이 가장 많이 터지나*를 로그로 **영영 답할 수 없었다** | `f73c180` |
+| 7 | 코드 탐지 정규식(`\b`)이 "M-99를"처럼 코드 뒤에 한국어 조사가 붙으면 매치 안 됨 | manufacturing review 테스트 작성 중 재현 | 환각 자재코드가 한국어 문장에서는 **탐지 자체가 안 됨** | `fc3135b` |
+| 8 | Windows 콘솔에서 `log.warning`이 cp949로 깨짐(stdout만 UTF-8 reconfigure, stderr는 안 함) | `run_manufacturing.py`를 실제로 실행 — `demo.py`는 이 경로를 한 번도 안 밟았음 | 실행 시 로그 메시지가 깨진 글자로 출력 | `fe36d5b` |
+| 9 | P-100·P-200이 자재(M-01·M-02)를 공유하는데 모의 CSV가 합산 수요를 못 채움 | 보조 시나리오용으로 P-200을 실제로 계산해봄(그전엔 "무관한 대조군"이라 서사만 있었음) | P-200이 **트리거 없이도 이미 infeasible** — 대조군 전제가 깨져 있었음 | `98a899d` |
 
 **#3의 교훈:** 그 단가표는 운영 코드에서 상속한 것이고, 주석에는 *"지어낸 수치 없음, 출처가 붙은 값"*
 이라고 적혀 있었다. **출처가 있다는 것과 정확하다는 것은 다르다.**
@@ -86,6 +106,14 @@ python demo.py routing    # 위 표를 직접 출력한다
 **#6의 교훈:** 이건 이식 과정에서 생긴 버그가 아니다 — 🟢 원본 로그 40건의 키를 전수 집계하니
 카테고리가 아예 없었다. **상속한 스키마도 검증 대상이다.** 그리고 고치려는 기능(규칙 후보 추출)이
 없었다면 이 구멍은 계속 안 보였을 것이다.
+
+**#7의 교훈:** Python `re`의 `\b`는 유니코드 `\w` 기준이라 한글 음절도 "단어 문자"로 친다 —
+영어 문서 도메인이었으면 절대 안 드러났을 결함이, 한국어가 본문인 도메인이라 테스트 작성
+단계에서 바로 걸렸다.
+
+**#9의 교훈:** "이 출하 건은 무관하다"는 서사를 문서·주석에 써두는 것과, 그걸 실제로 함수에
+넣어 돌려보는 것은 다르다. 검증 없는 서사는 그 자체로 부채다 — 나중에 그 서사를 근거로 다른
+결정(보조 시나리오 설계)을 내리면 부채가 전이된다.
 
 ```bash
 # 원본 로그가 남긴 키 전수 집계 — 카테고리 없음을 직접 확인
@@ -128,10 +156,14 @@ python demo.py audit    # 이 루프를 처음부터 끝까지 실행한다
 
 - 🔴 **`PgVectorStore`의 실 Postgres 왕복은 미검증.** SQL 생성과 바인딩은 가짜 연결로 고정했고,
   psycopg 의존은 모듈에 없다(연결 객체 주입). 로컬 DB를 배선하지 않았다.
-- 🔴 **Discord 봇 런타임 미이식.** 채널→역할 경계는 `adapters/discord/`로 분리했지만, 실제 승인 UI는
-  없다. HITL은 `GateDecision.requires_human`까지 표현되고 그 다음이 비어 있다.
-- 🔴 **end-to-end 파이프라인 실배선 없음.** `produce → gate → publish`는 테스트로 관통하지만,
-  이를 구동하는 프로덕션 진입점은 없다(데모 CLI는 오프라인 조각만 보여준다).
+- 🟢 **HITL 승인 로직은 이제 있다 — 2026-08-26.** `core/approval.py`(`resolve`·`console_ask`)가
+  `GateDecision.requires_human`을 실제 승인/반려로 잇는다. **단, Discord 승인 UI는 여전히
+  미이식**(채널→역할 경계는 `adapters/discord/`로 분리해둔 상태 그대로) — 지금 있는 건 콘솔
+  구현체 하나뿐이고, `resolve()`가 포트라 Discord 버튼도 나중에 같은 방식으로 꽂을 수 있다.
+- 🟢 **manufacturing은 end-to-end 실배선이 있다 — 2026-08-26.** `run_manufacturing.py`가
+  `produce → gate → (필요시 사람 승인) → publish`를 실제로 구동한다. **단, youtube·research는
+  여전히 프로덕션 진입점이 없다**(`demo.py`는 셋 다 오프라인 조각만 보여준다) — manufacturing의
+  패턴을 그대로 복제하면 되지만 아직 안 했다.
 - 🟡 **Gemini/OpenAI 임베딩 비용은 계측되지 않는다.** `CostRouter`는 LLM 호출만 감싼다.
 - 🟡 **규칙 후보는 우리 게이트가 남긴 로그에서만 나온다.** 외부 검출기(daily-drill)를 producer로
   붙이는 배선은 아직 없다. 그리고 상속한 실 운영 로그 40건은 카테고리가 없는 구 스키마라
