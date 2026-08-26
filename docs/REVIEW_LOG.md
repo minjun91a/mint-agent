@@ -45,3 +45,12 @@
 - **생략 사유**: 동일(표준화된 방침 유지).
 - **produce·review·publish 3단 전부 완성** — `ManufacturingAdapter`가 `PlatformAdapter`를
   완전히 만족한다. 결함 없이 첫 실행에 테스트 전부 통과(694 green).
+
+## 2026-08-26 · 트랙 B 생략 — core.approval (HITL 승인 로직)
+
+- **슬라이스**: `core/approval.py`(`resolve` — GateDecision → 최종 실행 여부) + 테스트 —
+  146줄/2파일, 상한 이내라 커밋 1개.
+- **엔진 레벨로 배치한 이유**: HITL은 어댑터 무관 관심사 — youtube·research·manufacturing
+  전부 같은 `resolve()`를 쓴다. 실제 입출력(콘솔 input 등)은 의도적으로 넣지 않음 — 그건
+  다음 슬라이스(CLI 배선)의 몫.
+- **생략 사유**: 동일(표준화된 방침 유지). 검증: 테스트 699 green.
