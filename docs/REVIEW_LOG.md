@@ -65,3 +65,21 @@
   데모를 도는데 blocking input은 그걸 멈추게 한다. 대신 `core.approval.resolve`를
   승인/반려 두 결과로 시뮬레이션. 142줄/2파일, 테스트 6건.
 - **생략 사유**: 동일. 검증: 테스트 713 green, `python demo.py manufacturing` 수동 실행 확인.
+
+## 2026-08-26 · 트랙 B 생략 — console_ask 이동 + run_manufacturing.py (e2e 진입점)
+
+- **슬라이스 1(리팩터)**: `console_ask`를 `demo.py`→`core/approval.py`로 이동. 두 번째
+  소비자(`run_manufacturing.py`)가 생기며 데모→프로덕션 역방향 의존이 드러나 정정.
+- **슬라이스 2**: `run_manufacturing.py` 신설 — `demo.py`와 달리 **produce를 진짜 부른다**
+  (produce→gate→resolve→publish 전 구간 실배선). `docs/metrics.md`의 "end-to-end 파이프라인
+  실배선 없음"을 manufacturing 세로선에서 닫음.
+- **★ 실행해서 직접 찾은 결함**: 스크립트를 실제로 돌려보니 `log.warning`이 Windows 콘솔에서
+  깨졌다(cp949). `demo.py`는 produce를 안 불러 이 경로를 한 번도 안 밟았던 것 — stdout만
+  UTF-8로 바꾸던 기존 패턴이 stderr(logging 기본 출력)엔 안 먹힌다는 걸 이번에 처음 발견.
+  stderr도 같이 reconfigure하도록 고침.
+- **★ 테스트 작성 중 또 하나**: 첫 "approve 되는지" 테스트에서 가짜 게이트웨이가 세 프롬프트에
+  전부 같은 텍스트를 돌려주게 짰더니 review가 **정확하게** 정보 노출로 reject했다 — 프로덕션
+  버그가 아니라 테스트 픽스처가 "고객사 회신도 내부 정보를 담는" 비현실적 상황을 만든 것.
+  프롬프트별로 다른 텍스트를 내는 가짜로 교체해 해결(review가 제대로 작동하는 증거로 남김).
+- 생략 사유: 동일. 검증: 테스트 722 green, `python run_manufacturing.py` 수동 실행(키 없이
+  reject 확인) + 가짜 게이트웨이로 approve/reject/review 3경로 전부 테스트.
