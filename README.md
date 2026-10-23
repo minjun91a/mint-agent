@@ -183,6 +183,11 @@ macOS/Linux에서는 `.venv/bin/python -m pytest`를 사용합니다.
 작업별 근거와 완료 조건은 [취업용 마감 계획](docs/portfolio-roadmap.md)에 정리했습니다.
 새 어댑터나 UI 확장은 핵심 경로 마감 이후로 미룹니다.
 
+다음 검수는 [42건의 사실·초안·판정 근거](docs/eval-review/manufacturing-v1-review.md)와
+[빈 응답 CSV](docs/eval-review/manufacturing-v1-decisions.csv)로 진행합니다. 현재 전부 미검수입니다.
+[실제 모델 측정 준비](docs/manufacturing-model-run.md)에는 키 없는 계획·리허설과
+명시적으로 선택하는 실제 실행 명령이 있습니다. 실제 모델 비용·지연은 아직 측정하지 않았습니다.
+
 ## 문서와 배경
 
 최민준의 AI 서비스·에이전트 개발 포트폴리오입니다.

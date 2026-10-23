@@ -237,3 +237,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 모델 실행 기록·검수 응답은 명시적 검토 전까지 커밋하지 않는다.
+/output/
+

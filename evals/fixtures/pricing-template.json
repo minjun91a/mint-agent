@@ -1,0 +1,10 @@
+{
+  "model": "REPLACE_WITH_VERIFIED_MODEL_ID",
+  "currency": "USD",
+  "tier": "standard",
+  "verified_on": "YYYY-MM-DD",
+  "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+  "input_usd_per_million": null,
+  "cached_input_usd_per_million": null,
+  "output_usd_per_million": null
+}
