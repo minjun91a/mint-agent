@@ -34,3 +34,9 @@ jobs:
 
       - name: Run characterization tests
         run: python -m pytest
+
+      - name: Evaluate fixed manufacturing policies (offline)
+        run: |
+          python -m evals.manufacturing --split dev --output eval-dev.json
+          python -m evals.manufacturing --split holdout --output eval-holdout.json
+

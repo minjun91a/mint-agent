@@ -1,0 +1,2 @@
+# 체크섬으로 고정한 평가 입력은 Windows 체크아웃에서도 같은 바이트를 유지한다.
+evals/fixtures/*.json text eol=lf

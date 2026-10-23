@@ -20,12 +20,14 @@ run_manufacturing.py — manufacturing 어댑터 **엔드투엔드 실행 진입
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
 from adapters.manufacturing.adapter import ManufacturingAdapter
 from adapters.manufacturing.analyze import ShipmentChangeTrigger
-from adapters.manufacturing.draft import render_impact_facts
+from adapters.manufacturing.draft import DEFAULT_TIMEOUT_SECONDS, render_impact_facts
+from adapters.manufacturing.errors import DraftGenerationError
 from adapters.manufacturing.erp_data import load_erp_snapshot
 from adapters.manufacturing.publish import FileConfirmationSink, ManufacturingPublisher
 from core.approval import ApprovalPrompt, console_ask
@@ -59,7 +61,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
                         help="ERP CSV 5개가 있는 디렉터리")
     parser.add_argument("--out-dir", default=str(_DEFAULT_OUT_DIR), dest="out_dir",
                         help="확정 문서를 쓸 디렉터리")
+    parser.add_argument('--timeout-seconds', type=_positive_seconds, default=DEFAULT_TIMEOUT_SECONDS,
+                        help='기본 Gemini 호출 1회의 제한 시간(초), 기본 30. 자동 재시도 없음')
     return parser.parse_args(argv)
+
+
+def _positive_seconds(value: str) -> float:
+    seconds = float(value)
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise argparse.ArgumentTypeError('제한 시간은 양수인 유한 숫자여야 합니다.')
+    return seconds
 
 
 def run(args: argparse.Namespace, *, ask: ApprovalPrompt = console_ask,
@@ -76,10 +87,14 @@ def run(args: argparse.Namespace, *, ask: ApprovalPrompt = console_ask,
                                     new_ship_date=args.new_date)
     adapter = ManufacturingAdapter(
         snapshot, gateway=gateway,
-        publisher=ManufacturingPublisher(FileConfirmationSink(args.out_dir)))
+        publisher=ManufacturingPublisher(FileConfirmationSink(args.out_dir)),
+        timeout_seconds=args.timeout_seconds)
 
     try:
         produced = adapter.produce(trigger)
+    except DraftGenerationError as exc:
+        print(f'초안 생성 실패: stage={exc.stage} code={exc.kind}. 발행하지 않음. 자동 재시도 없음.')
+        return 3
     except ValueError as exc:
         print(f"❌ {exc}")
         return 1
