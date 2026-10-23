@@ -123,3 +123,26 @@ def test_main_wires_argv_without_asking_when_no_key(tmp_path):
     """키 없음 → reject → ask 호출 안 됨(Unreachable이 안 터지면 배선이 맞다는 뜻)."""
     code = rm.main(["--out-dir", str(tmp_path)], ask=_Unreachable())
     assert code == 0
+
+
+def test_human_sees_facts_and_all_drafts_before_deciding(tmp_path, capsys):
+    def ask(decision):
+        preview = capsys.readouterr().out
+        for expected in ('아직 저장되지 않음', '부족 440개', '## 일정 조정안',
+                         '## 협력업체 요청', '## 고객사 회신', '협력사A의 M-01'):
+            assert expected in preview
+        assert list(tmp_path.glob('*.md')) == []
+        return False
+
+    assert rm.run(_args(tmp_path), ask=ask, gateway=_LeakyGateway()) == 0
+    assert list(tmp_path.glob('*.md')) == []
+
+
+def test_wrong_quantity_is_rejected_without_asking_or_writing(tmp_path):
+    class WrongQuantity(_CleanGateway):
+        def complete(self, system, prompt, **kwargs):
+            return 'M-01 부족 수량 500개'  # 실제 부족분은 440, 500은 출하수량.
+
+    assert rm.run(_args(tmp_path), ask=_Unreachable(), gateway=WrongQuantity()) == 0
+    assert list(tmp_path.glob('*.md')) == []
+

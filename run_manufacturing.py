@@ -25,11 +25,11 @@ from pathlib import Path
 
 from adapters.manufacturing.adapter import ManufacturingAdapter
 from adapters.manufacturing.analyze import ShipmentChangeTrigger
+from adapters.manufacturing.draft import render_impact_facts
 from adapters.manufacturing.erp_data import load_erp_snapshot
 from adapters.manufacturing.publish import FileConfirmationSink, ManufacturingPublisher
-from core.approval import ApprovalPrompt, console_ask, resolve
+from core.approval import ApprovalPrompt, console_ask
 from core.llm import LLMGateway
-from core.pipeline import gate
 
 _DEFAULT_DATA_DIR = Path(__file__).parent / "data" / "manufacturing"
 _DEFAULT_OUT_DIR = Path(__file__).parent / "output" / "manufacturing"
@@ -84,18 +84,32 @@ def run(args: argparse.Namespace, *, ask: ApprovalPrompt = console_ask,
         print(f"❌ {exc}")
         return 1
 
-    decision = gate(adapter, produced)
+    def ask_with_preview(decision):
+        print('\n검토할 발행 내용 (아직 저장되지 않음)')
+        print(render_impact_facts(produced['impact']))
+        for title, key in (('일정 조정안', 'adjustment_plan'),
+                           ('협력업체 요청', 'supplier_request'),
+                           ('고객사 회신', 'customer_reply')):
+            print(f'\n## {title}\n{produced[key]}')
+        return ask(decision)
+
+    authorization = adapter.authorize_publish(produced, ask=ask_with_preview)
+    decision = authorization.decision
     v = decision.verdict
     print(f"게이트 판정: {v.recommendation} (위반 {len(v.violations)}건)")
     for violation in v.violations:
         print(f"  └ [{violation.severity}] {violation.category}: {violation.detail}")
 
-    outcome = resolve(decision, ask=ask)
+    outcome = authorization.outcome
     if not outcome.publish:
         print(f"발행하지 않음 (source={outcome.source})")
         return 0
 
-    result = adapter.publish(produced)
+    try:
+        result = adapter.publish(produced, permit=authorization.permit)
+    except PermissionError as exc:
+        print(f'발행하지 않음: {exc}')
+        return 1
     print(f"✅ 확정 발행: {result['location']}")
     return 0
 
@@ -107,3 +121,4 @@ def main(argv: list[str] | None = None, *, ask: ApprovalPrompt = console_ask) ->
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -166,3 +166,78 @@ def test_review_sends_customer_leak_to_human_not_reject():
     assert verdict.recommendation == "review"   # reject가 아니다 — 환각이 아니라 정책 문제
     assert verdict.passed is True                # med는 passed를 안 깬다(high만 깬다)
     assert "customer_facing_info_leak" in [v.category for v in verdict.violations]
+
+
+@pytest.mark.parametrize('text', [
+    'M-01 부족 수량 440개', 'M-01 필요 1,040개 / 확보 600개 / 부족 440개',
+    'M-01 자재 440개 부족', 'M-01 자재를 440EA 추가 요청합니다.',
+    '신규 출하일 2026-08-28', '기존 출하일 2026-08-31',
+    '출하일 2026/8/28', '출하일 2026년 8월 28일',
+    'M-01 입고일 2026-08-29', 'P-100 출하수량 500개',
+    '남은 생산 260개', '3일 앞당김',
+])
+def test_explicit_matching_facts_are_approved(text):
+    assert review({**CLEAN_CONTENT, 'adjustment_plan': text}).recommendation == 'approve'
+
+
+@pytest.mark.parametrize(('text', 'category'), [
+    ('M-01 부족 수량 44개', 'quantity_mismatch'),
+    ('M-01 부족 수량 500개', 'quantity_mismatch'),  # 출하수량과 같아도 부족분은 아니다.
+    ('M-01 필요 수량 440개', 'quantity_mismatch'),
+    ('M-01 확보 수량 1040개', 'quantity_mismatch'),
+    ('M-01 부족 수량 -440개', 'quantity_mismatch'),
+    ('M-01 부족 수량 440.5개', 'quantity_mismatch'),
+    ('신규 출하일 2026-08-29', 'date_mismatch'),  # 입고일을 출하일로 빌려 쓰지 못한다.
+    ('기존 출하일 2026-08-28', 'date_mismatch'),
+    ('M-01 입고일 2026-08-28', 'date_mismatch'),
+    ('출하일 2026-02-30', 'date_mismatch'),
+])
+def test_mismatching_bound_facts_are_rejected(text, category):
+    verdict = review({**CLEAN_CONTENT, 'adjustment_plan': text})
+    assert verdict.recommendation == 'reject'
+    assert category in [v.category for v in verdict.violations]
+
+
+@pytest.mark.parametrize('text', [
+    'M-01 440개', '440개 부족', '입고일 2026-08-29', '2026-08-28 검토',
+    'M-01 부족 수량 사백사십개', 'M-01 부족 수량 440박스',
+    '내일 출하', '출하일 8월 28일', 'M-01 부족 수량 4,40개',
+    'M-01 부족 수량 440 검토',
+    'M-01 부족 수량 다섯개', 'M-01 부족 수량 스물네개', '사흘 뒤 출하',
+    'M-01 재고 수량 600개',
+    'M-01 필요 수량 1040개가 부족합니다.',
+])
+def test_unsupported_or_unbound_facts_require_human_review(text):
+    verdict = review({**CLEAN_CONTENT, 'adjustment_plan': text})
+    assert verdict.recommendation == 'review'
+    assert 'unverified_numeric_claim' in [v.category for v in verdict.violations]
+
+
+def test_quantities_are_bound_to_their_material_not_another_material():
+    impact = CascadeImpact(shipment=SHIPMENT, new_ship_date='2026-08-28',
+                           days_pulled_forward=3, qty_remaining_to_produce=260,
+                           shortfalls=[*SHORT_IMPACT.shortfalls,
+                                       MaterialShortfall('M-02', 200, 100, 100)])
+    verdict = review({**CLEAN_CONTENT, 'impact': impact,
+                      'adjustment_plan': 'M-01 부족 100개; M-02 부족 440개'})
+    assert verdict.recommendation == 'reject'
+    assert sum(v.category == 'quantity_mismatch' for v in verdict.violations) == 2
+
+
+def test_non_string_draft_is_missing_instead_of_being_stringified():
+    assert review({**CLEAN_CONTENT, 'adjustment_plan': None}).recommendation == 'reject'
+
+
+def test_multiple_inbound_rows_do_not_make_one_quantity_or_date_unambiguous():
+    sf = SHORT_IMPACT.shortfalls[0]
+    impact = CascadeImpact(shipment=SHIPMENT, new_ship_date='2026-08-28',
+                           days_pulled_forward=3, qty_remaining_to_produce=260,
+                           shortfalls=[MaterialShortfall(sf.material, sf.qty_needed,
+                               sf.qty_available_by_new_date, sf.shortfall,
+                               [*sf.late_arrivals, InboundLine('M-01', '협력사B', '2026-08-29', 500)])])
+    for text in ('M-01 입고 수량 500개', 'M-01 입고일 2026-08-29'):
+        assert review({**CLEAN_CONTENT, 'impact': impact,
+                       'adjustment_plan': text}).recommendation == 'review'
+    assert review({**CLEAN_CONTENT, 'impact': impact,
+                   'adjustment_plan': 'M-01 협력사A 입고 수량 500개'}).recommendation == 'approve'
+
