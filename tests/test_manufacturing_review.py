@@ -175,6 +175,8 @@ def test_review_sends_customer_leak_to_human_not_reject():
     '출하일 2026/8/28', '출하일 2026년 8월 28일',
     'M-01 입고일 2026-08-29', 'P-100 출하수량 500개',
     '남은 생산 260개', '3일 앞당김',
+    '검토 결과를 공개하기 전에 확인하겠습니다.',
+    '필요한 개선 사항을 검토합니다.',
 ])
 def test_explicit_matching_facts_are_approved(text):
     assert review({**CLEAN_CONTENT, 'adjustment_plan': text}).recommendation == 'approve'
@@ -206,6 +208,7 @@ def test_mismatching_bound_facts_are_rejected(text, category):
     'M-01 부족 수량 다섯개', 'M-01 부족 수량 스물네개', '사흘 뒤 출하',
     'M-01 재고 수량 600개',
     'M-01 필요 수량 1040개가 부족합니다.',
+    'M-01 부족 수량 사백사십개가부족합니다.',
 ])
 def test_unsupported_or_unbound_facts_require_human_review(text):
     verdict = review({**CLEAN_CONTENT, 'adjustment_plan': text})
