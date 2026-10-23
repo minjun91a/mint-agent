@@ -26,8 +26,9 @@ from adapters.manufacturing.draft import (
     draft_supplier_request,
 )
 from adapters.manufacturing.erp_data import ErpSnapshot
-from adapters.manufacturing.publish import ManufacturingPublisher
+from adapters.manufacturing.publish import ManufacturingPublisher, PublicationAuthorization, PublicationPermit
 from adapters.manufacturing.review import review as review_drafts
+from core.approval import ApprovalPrompt
 from core.llm import LLMGateway
 from core.trust.verify import Verdict
 
@@ -71,11 +72,16 @@ class ManufacturingAdapter:
         }
 
     def review(self, content: dict[str, Any], context: Any = None) -> Verdict:
-        """초안 3종 → 환각 코드 검증 Verdict. LLM 불필요, 완전히 결정적(`review.py`)."""
+        """초안 3종 → 코드·명시적 수량/날짜·정보 노출 검사. LLM 불필요."""
         return review_drafts(content)
 
-    def publish(self, asset: dict[str, Any]) -> dict[str, Any]:
-        """승인된 조정안 → 확정 발행. publisher 미주입 시 명시적 에러.
+    def authorize_publish(self, asset: dict[str, Any], *, ask: ApprovalPrompt) -> PublicationAuthorization:
+        if self._publisher is None:
+            raise NotImplementedError('manufacturing publish 백엔드 미배선')
+        return self._publisher.authorize(asset, ask=ask)
+
+    def publish(self, asset: dict[str, Any], *, permit: PublicationPermit | None = None) -> dict[str, Any]:
+        """일회성 허가와 같은 내용만 발행. publisher 미주입 시 명시적 에러.
 
         발행은 되돌리기 어려운 외부 행위다. 기본 sink를 몰래 만들지 않고 **명시적 배선을
         요구**한다(research publish와 같은 규약).
@@ -84,7 +90,8 @@ class ManufacturingAdapter:
             raise NotImplementedError(
                 "manufacturing publish 백엔드 미배선 — ManufacturingPublisher(sink)를 주입하라"
             )
-        return self._publisher.publish(asset)
+        return self._publisher.publish(asset, permit=permit)
 
 
 __all__ = ["ManufacturingAdapter"]
+

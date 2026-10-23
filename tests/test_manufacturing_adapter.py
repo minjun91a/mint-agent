@@ -97,7 +97,9 @@ def test_publish_delegates_to_injected_publisher(tmp_path: Path):
     adapter = _adapter(publisher=ManufacturingPublisher(
         FileConfirmationSink(tmp_path), clock=lambda: "2026-08-26T09:00:00"))
 
-    out = adapter.publish(adapter.produce(TRIGGER))
+    produced = adapter.produce(TRIGGER)
+    permit = adapter.authorize_publish(produced, ask=lambda d: False).permit
+    out = adapter.publish(produced, permit=permit)
     assert Path(out["location"]).exists()
 
 
@@ -113,7 +115,8 @@ def test_produce_gate_publish_roundtrip(tmp_path: Path):
     decision = gate(adapter, produced)
     assert decision.proceed is True
 
-    out = adapter.publish(produced)
+    permit = adapter.authorize_publish(produced, ask=lambda d: False).permit
+    out = adapter.publish(produced, permit=permit)
     doc = Path(out["location"]).read_text(encoding="utf-8")
     assert "M-01" in doc
 
@@ -155,6 +158,15 @@ def test_material_delay_trigger_roundtrips_through_gate_and_publish(tmp_path: Pa
     decision = gate(adapter, produced)
     assert decision.proceed is True
 
-    out = adapter.publish(produced)
+    permit = adapter.authorize_publish(produced, ask=lambda d: False).permit
+    out = adapter.publish(produced, permit=permit)
     doc = Path(out["location"]).read_text(encoding="utf-8")
     assert "M-04" in doc
+
+
+def test_adapter_publish_without_authorization_is_blocked(tmp_path):
+    adapter = _adapter(publisher=ManufacturingPublisher(FileConfirmationSink(tmp_path)))
+    with pytest.raises(PermissionError):
+        adapter.publish(adapter.produce(TRIGGER))
+    assert list(tmp_path.iterdir()) == []
+
