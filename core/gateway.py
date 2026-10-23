@@ -83,12 +83,13 @@ def wrap(base: LLMGateway, *,
     return CostRouter(base, route=route, pricing=pricing, sink=_observer)
 
 
-def default_gemini(*, api_key: str | None = None) -> CostRouter:
+def default_gemini(*, api_key: str | None = None,
+                   timeout_seconds: float | None = None) -> CostRouter:
     """관측 래핑된 기본 Gemini 게이트웨이. 어댑터의 `else GeminiGateway()` 자리를 대체한다.
 
     `model="auto"`로 부르면 Gemini 안에서 티어링한다(flash-lite → flash → pro).
     """
-    return wrap(GeminiGateway(api_key=api_key), route=GEMINI_ROUTE)
+    return wrap(GeminiGateway(api_key=api_key, timeout_seconds=timeout_seconds), route=GEMINI_ROUTE)
 
 
 def default_openai(*, api_key: str | None = None) -> CostRouter:
@@ -103,3 +104,4 @@ def default_openai(*, api_key: str | None = None) -> CostRouter:
 def default_claude(*, api_key: str | None = None) -> CostRouter:
     """관측 래핑된 기본 Claude 게이트웨이. `model="auto"`면 haiku → sonnet → opus로 티어링한다."""
     return wrap(ClaudeGateway(api_key=api_key), route=CLAUDE_ROUTE)
+

@@ -10,6 +10,8 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 from core.llm import (
     ClaudeGateway,
     Completion,
@@ -48,8 +50,9 @@ def _install_fake_genai(monkeypatch, *, text: str | None, usage=None):
             calls["system_instruction"] = system_instruction
             calls["generation_config"] = generation_config
 
-        def generate_content(self, prompt):
+        def generate_content(self, prompt, **kwargs):
             calls["prompt"] = prompt
+            calls.update(kwargs)
             return _Resp(text)
 
     fake = types.ModuleType("google.generativeai")
@@ -83,6 +86,24 @@ def test_available_reads_env_when_no_explicit_key(monkeypatch):
 
 def test_satisfies_llm_gateway_protocol():
     assert isinstance(GeminiGateway(), LLMGateway)
+
+
+def test_explicit_timeout_reaches_sdk_without_automatic_retry(monkeypatch):
+    calls = _install_fake_genai(monkeypatch, text='ok')
+    GeminiGateway(api_key='fake', timeout_seconds=2.5).complete('S', 'P', model='m')
+    assert calls['request_options'] == {'timeout': 2.5, 'retry': None}
+
+
+def test_unspecified_timeout_preserves_other_callers_sdk_defaults(monkeypatch):
+    calls = _install_fake_genai(monkeypatch, text='ok')
+    GeminiGateway(api_key='fake').complete('S', 'P', model='m')
+    assert 'request_options' not in calls
+
+
+@pytest.mark.parametrize('seconds', [0, -1, float('nan'), float('inf'), True])
+def test_timeout_rejects_invalid_configuration(seconds):
+    with pytest.raises(ValueError, match='timeout'):
+        GeminiGateway(timeout_seconds=seconds)
 
 
 # ── complete: genai 설정 빌드 & 응답 처리 ──
@@ -334,3 +355,4 @@ def test_openai_empty_response_in_json_mode_still_returns_empty_object(monkeypat
 def test_claude_empty_response_in_json_mode_still_returns_empty_object(monkeypatch):
     _install_fake_anthropic(monkeypatch, text=None)
     assert ClaudeGateway(api_key="k").complete("S", "P", model="m") == "{}"
+

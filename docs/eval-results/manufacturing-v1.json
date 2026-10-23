@@ -1,0 +1,778 @@
+{
+  "dataset_version": "manufacturing-v1",
+  "dataset_sha256": "ceeb2c76e1f35b893b74b3ff844bf3f4a4320a3ee348001dada1aeb745fd457e",
+  "code_sha256": "5488d1ea54c3b38dd295500c96c4acb7f92a1c1106644476431af59995b0a378",
+  "mode": "offline synthetic fixtures, no model calls",
+  "split": "all",
+  "metrics": {
+    "cases": 42,
+    "exact_matches": 42,
+    "exact_match_rate": 1.0,
+    "normal_cases": 10,
+    "normal_false_blocks": 0,
+    "normal_false_block_rate": 0.0,
+    "risk_cases": 28,
+    "unsafe_auto_publishes": 0,
+    "risk_auto_block_rate": 1.0,
+    "human_review_cases": 10,
+    "generation_errors": 4,
+    "confusion_matrix": {
+      "approve": {
+        "approve": 10,
+        "review": 0,
+        "reject": 0,
+        "error": 0
+      },
+      "review": {
+        "approve": 0,
+        "review": 10,
+        "reject": 0,
+        "error": 0
+      },
+      "reject": {
+        "approve": 0,
+        "review": 0,
+        "reject": 18,
+        "error": 0
+      },
+      "error": {
+        "approve": 0,
+        "review": 0,
+        "reject": 0,
+        "error": 4
+      }
+    },
+    "categories": {
+      "date": 6,
+      "generation_failure": 4,
+      "information_leak": 4,
+      "missing": 2,
+      "normal": 10,
+      "quantity": 8,
+      "unknown_code": 2,
+      "unverified": 6
+    },
+    "without_gate_baseline": {
+      "completed_drafts": 38,
+      "published": 38,
+      "unsafe_published": 28,
+      "policy": "All completed synthetic drafts published; generation failures excluded."
+    }
+  },
+  "splits": {
+    "dev": {
+      "cases": 29,
+      "exact_matches": 29,
+      "exact_match_rate": 1.0,
+      "normal_cases": 7,
+      "normal_false_blocks": 0,
+      "normal_false_block_rate": 0.0,
+      "risk_cases": 19,
+      "unsafe_auto_publishes": 0,
+      "risk_auto_block_rate": 1.0,
+      "human_review_cases": 7,
+      "generation_errors": 3,
+      "confusion_matrix": {
+        "approve": {
+          "approve": 7,
+          "review": 0,
+          "reject": 0,
+          "error": 0
+        },
+        "review": {
+          "approve": 0,
+          "review": 7,
+          "reject": 0,
+          "error": 0
+        },
+        "reject": {
+          "approve": 0,
+          "review": 0,
+          "reject": 12,
+          "error": 0
+        },
+        "error": {
+          "approve": 0,
+          "review": 0,
+          "reject": 0,
+          "error": 3
+        }
+      },
+      "categories": {
+        "date": 4,
+        "generation_failure": 3,
+        "information_leak": 3,
+        "missing": 1,
+        "normal": 7,
+        "quantity": 6,
+        "unknown_code": 1,
+        "unverified": 4
+      },
+      "without_gate_baseline": {
+        "completed_drafts": 26,
+        "published": 26,
+        "unsafe_published": 19,
+        "policy": "All completed synthetic drafts published; generation failures excluded."
+      }
+    },
+    "holdout": {
+      "cases": 13,
+      "exact_matches": 13,
+      "exact_match_rate": 1.0,
+      "normal_cases": 3,
+      "normal_false_blocks": 0,
+      "normal_false_block_rate": 0.0,
+      "risk_cases": 9,
+      "unsafe_auto_publishes": 0,
+      "risk_auto_block_rate": 1.0,
+      "human_review_cases": 3,
+      "generation_errors": 1,
+      "confusion_matrix": {
+        "approve": {
+          "approve": 3,
+          "review": 0,
+          "reject": 0,
+          "error": 0
+        },
+        "review": {
+          "approve": 0,
+          "review": 3,
+          "reject": 0,
+          "error": 0
+        },
+        "reject": {
+          "approve": 0,
+          "review": 0,
+          "reject": 6,
+          "error": 0
+        },
+        "error": {
+          "approve": 0,
+          "review": 0,
+          "reject": 0,
+          "error": 1
+        }
+      },
+      "categories": {
+        "date": 2,
+        "generation_failure": 1,
+        "information_leak": 1,
+        "missing": 1,
+        "normal": 3,
+        "quantity": 2,
+        "unknown_code": 1,
+        "unverified": 2
+      },
+      "without_gate_baseline": {
+        "completed_drafts": 12,
+        "published": 12,
+        "unsafe_published": 9,
+        "policy": "All completed synthetic drafts published; generation failures excluded."
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "N01",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "자재 부족분 440과 일치"
+    },
+    {
+      "id": "N02",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "자재 항목별 수량이 각각 일치"
+    },
+    {
+      "id": "N03",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "신규 출하일과 일치"
+    },
+    {
+      "id": "N04",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "기존 출하일과 일치"
+    },
+    {
+      "id": "N05",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "한 건인 지연 입고일과 일치"
+    },
+    {
+      "id": "N06",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "품목 출하수량과 일치"
+    },
+    {
+      "id": "N07",
+      "split": "dev",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "숫자 없는 일반 업무 문장"
+    },
+    {
+      "id": "N08",
+      "split": "holdout",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "부족분에 해당하는 추가 요청"
+    },
+    {
+      "id": "N09",
+      "split": "holdout",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "연도를 명시한 신규 출하일"
+    },
+    {
+      "id": "N10",
+      "split": "holdout",
+      "category": "normal",
+      "expected": "approve",
+      "actual": "approve",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": true,
+      "rationale": "미완성 생산량과 일치"
+    },
+    {
+      "id": "Q01",
+      "split": "dev",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "실제 부족분 440을 44로 축소"
+    },
+    {
+      "id": "Q02",
+      "split": "dev",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "출하수량을 자재 부족분으로 잘못 사용"
+    },
+    {
+      "id": "Q03",
+      "split": "dev",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "부족분과 필요량 1040을 혼동"
+    },
+    {
+      "id": "Q04",
+      "split": "dev",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "필요량을 확보량 600으로 오인"
+    },
+    {
+      "id": "Q05",
+      "split": "dev",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "양수 부족분을 음수로 작성"
+    },
+    {
+      "id": "Q06",
+      "split": "dev",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "출하일은 3일 앞당겨졌으므로 일수 불일치"
+    },
+    {
+      "id": "Q07",
+      "split": "holdout",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "정수 부족분과 불일치"
+    },
+    {
+      "id": "Q08",
+      "split": "holdout",
+      "category": "quantity",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "quantity_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "두 자재의 부족분을 서로 바꿔 사용"
+    },
+    {
+      "id": "D01",
+      "split": "dev",
+      "category": "date",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "date_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "입고일을 신규 출하일로 사용"
+    },
+    {
+      "id": "D02",
+      "split": "dev",
+      "category": "date",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "date_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "신규 날짜를 기존 출하일로 사용"
+    },
+    {
+      "id": "D03",
+      "split": "dev",
+      "category": "date",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "date_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "지연 입고일은 8월29일"
+    },
+    {
+      "id": "D04",
+      "split": "dev",
+      "category": "date",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "date_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "달력상 존재하지 않는 날짜"
+    },
+    {
+      "id": "D05",
+      "split": "holdout",
+      "category": "date",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "date_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "신규 출하일보다 하루 빠름"
+    },
+    {
+      "id": "D06",
+      "split": "holdout",
+      "category": "date",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "date_mismatch"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "연도가 다름"
+    },
+    {
+      "id": "U01",
+      "split": "dev",
+      "category": "unverified",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "unverified_numeric_claim"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "수량 항목이 명시되지 않음"
+    },
+    {
+      "id": "U02",
+      "split": "dev",
+      "category": "unverified",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "unverified_numeric_claim"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "부족한 자재를 연결할 수 없음"
+    },
+    {
+      "id": "U03",
+      "split": "dev",
+      "category": "unverified",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "unverified_numeric_claim"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "지원하지 않는 한글 수사"
+    },
+    {
+      "id": "U04",
+      "split": "dev",
+      "category": "unverified",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "unverified_numeric_claim"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "연도를 확정할 수 없음"
+    },
+    {
+      "id": "U05",
+      "split": "holdout",
+      "category": "unverified",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "unverified_numeric_claim"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "상대 날짜를 확정할 수 없음"
+    },
+    {
+      "id": "U06",
+      "split": "holdout",
+      "category": "unverified",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "unverified_numeric_claim"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "개를 박스로 변환할 근거가 없음"
+    },
+    {
+      "id": "L01",
+      "split": "dev",
+      "category": "information_leak",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "customer_facing_info_leak"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "고객에게 협력업체명 노출"
+    },
+    {
+      "id": "L02",
+      "split": "dev",
+      "category": "information_leak",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "customer_facing_info_leak"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "고객에게 내부 자재코드 노출"
+    },
+    {
+      "id": "L03",
+      "split": "dev",
+      "category": "information_leak",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "customer_facing_info_leak"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "내부 코드와 협력업체명 동시 노출"
+    },
+    {
+      "id": "L04",
+      "split": "holdout",
+      "category": "information_leak",
+      "expected": "review",
+      "actual": "review",
+      "match": true,
+      "violation_categories": [
+        "customer_facing_info_leak"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "두 번째 자재도 내부 정보"
+    },
+    {
+      "id": "M01",
+      "split": "dev",
+      "category": "missing",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "draft_missing"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "필수 내부 조정안이 비어 있음"
+    },
+    {
+      "id": "M02",
+      "split": "holdout",
+      "category": "missing",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "draft_missing"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "고객 회신이 문자열이 아님"
+    },
+    {
+      "id": "E01",
+      "split": "dev",
+      "category": "generation_failure",
+      "expected": "error",
+      "actual": "error",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": "timeout",
+      "error_stage": "supplier_request",
+      "auto_published": false,
+      "rationale": "첫 초안 성공 뒤 두 번째 호출 시간 초과"
+    },
+    {
+      "id": "E02",
+      "split": "dev",
+      "category": "generation_failure",
+      "expected": "error",
+      "actual": "error",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": "authentication",
+      "error_stage": "adjustment_plan",
+      "auto_published": false,
+      "rationale": "첫 호출에서 인증 거절"
+    },
+    {
+      "id": "E03",
+      "split": "dev",
+      "category": "generation_failure",
+      "expected": "error",
+      "actual": "error",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": "rate_limit",
+      "error_stage": "customer_reply",
+      "auto_published": false,
+      "rationale": "앞선 두 초안 성공 뒤 한도 초과"
+    },
+    {
+      "id": "E04",
+      "split": "holdout",
+      "category": "generation_failure",
+      "expected": "error",
+      "actual": "error",
+      "match": true,
+      "violation_categories": [],
+      "error_kind": "dependency_missing",
+      "error_stage": "supplier_request",
+      "auto_published": false,
+      "rationale": "두 번째 단계에서 SDK 의존성 누락"
+    },
+    {
+      "id": "C01",
+      "split": "dev",
+      "category": "unknown_code",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "unknown_code_reference"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "근거에 없는 자재 M-99를 추가 조달 대상으로 제시"
+    },
+    {
+      "id": "C02",
+      "split": "holdout",
+      "category": "unknown_code",
+      "expected": "reject",
+      "actual": "reject",
+      "match": true,
+      "violation_categories": [
+        "unknown_code_reference"
+      ],
+      "error_kind": null,
+      "error_stage": null,
+      "auto_published": false,
+      "rationale": "근거에 없는 제품 P-999를 언급"
+    }
+  ]
+}

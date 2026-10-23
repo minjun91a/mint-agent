@@ -21,6 +21,7 @@ from adapters.manufacturing.analyze import (
 )
 from adapters.manufacturing.draft import (
     _DEFAULT_MODEL,
+    DEFAULT_TIMEOUT_SECONDS,
     draft_adjustment_plan,
     draft_customer_reply,
     draft_supplier_request,
@@ -49,11 +50,13 @@ class ManufacturingAdapter:
 
     def __init__(self, snapshot: ErpSnapshot, *, model: str = _DEFAULT_MODEL,
                  gateway: LLMGateway | None = None,
-                 publisher: ManufacturingPublisher | None = None) -> None:
+                 publisher: ManufacturingPublisher | None = None,
+                 timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> None:
         self._snapshot = snapshot
         self._model = model
         self._gateway = gateway
         self._publisher = publisher
+        self._timeout_seconds = timeout_seconds
 
     def produce(self, brief: Trigger) -> dict[str, Any]:
         """트리거(고객사발 출하일 변경 또는 공급사발 자재 지연) → 연쇄 영향 + 3종 초안.
@@ -62,7 +65,8 @@ class ManufacturingAdapter:
         초안 속 숫자를 이 사실과 대조할 근거.
         """
         impact = _compute_impact(self._snapshot, brief)
-        kwargs = {"model": self._model, "gateway": self._gateway}
+        kwargs = {"model": self._model, "gateway": self._gateway,
+                  "timeout_seconds": self._timeout_seconds}
         return {
             "trigger": brief,
             "impact": impact,

@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 
 from adapters.manufacturing.analyze import CascadeImpact
+from adapters.manufacturing.errors import DraftGenerationError, classify_failure
 from core.gateway import default_gemini
 from core.llm import LLMGateway
 
@@ -24,6 +25,7 @@ log = logging.getLogger("mint.adapters.manufacturing.draft")
 
 _DEFAULT_MODEL = "gemini-2.5-flash"
 _TEMPERATURE = 0.3
+DEFAULT_TIMEOUT_SECONDS = 30.0
 
 UNAVAILABLE = "❌ LLM 게이트웨이 미가용 — API 키를 확인하세요"
 
@@ -98,32 +100,49 @@ def render_impact_facts(impact: CascadeImpact) -> str:
 
 
 def _draft(system_prompt: str, impact: CascadeImpact, *,
-          model: str, gateway: LLMGateway | None) -> str:
+          model: str, gateway: LLMGateway | None, stage: str,
+          timeout_seconds: float) -> str:
     """세 초안 함수가 공유하는 호출부 — system_prompt만 다르다."""
-    gw = gateway if gateway is not None else default_gemini()
-    if not gw.available:
-        log.warning("LLM 게이트웨이 미가용 — 초안 생성 생략")
-        return UNAVAILABLE
-    return gw.complete(system_prompt, render_impact_facts(impact),
-                       model=model, temperature=_TEMPERATURE, json_mode=False).strip()
+    gw = gateway if gateway is not None else default_gemini(timeout_seconds=timeout_seconds)
+    prompt = render_impact_facts(impact)
+    try:
+        if not gw.available:
+            log.warning("LLM 게이트웨이 미가용 — 초안 생성 생략")
+            return UNAVAILABLE
+        text = gw.complete(system_prompt, prompt, model=model,
+                           temperature=_TEMPERATURE, json_mode=False)
+        if not isinstance(text, str) or not text.strip():
+            raise DraftGenerationError(stage, 'invalid_response')
+        return text.strip()
+    except DraftGenerationError:
+        raise
+    except Exception as exc:
+        # API 경계에서만 변환한다. KeyboardInterrupt/SystemExit는 잡지 않는다.
+        raise DraftGenerationError(stage, classify_failure(exc)) from None
 
 
 def draft_adjustment_plan(impact: CascadeImpact, *, model: str = _DEFAULT_MODEL,
-                          gateway: LLMGateway | None = None) -> str:
+                          gateway: LLMGateway | None = None,
+                          timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> str:
     """연쇄 영향 → 내부 검토용 일정 조정안."""
-    return _draft(_ADJUSTMENT_SYSTEM_PROMPT, impact, model=model, gateway=gateway)
+    return _draft(_ADJUSTMENT_SYSTEM_PROMPT, impact, model=model, gateway=gateway,
+                  stage='adjustment_plan', timeout_seconds=timeout_seconds)
 
 
 def draft_supplier_request(impact: CascadeImpact, *, model: str = _DEFAULT_MODEL,
-                           gateway: LLMGateway | None = None) -> str:
+                           gateway: LLMGateway | None = None,
+                           timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> str:
     """연쇄 영향 → 협력업체 입고 조정 요청 초안."""
-    return _draft(_SUPPLIER_SYSTEM_PROMPT, impact, model=model, gateway=gateway)
+    return _draft(_SUPPLIER_SYSTEM_PROMPT, impact, model=model, gateway=gateway,
+                  stage='supplier_request', timeout_seconds=timeout_seconds)
 
 
 def draft_customer_reply(impact: CascadeImpact, *, model: str = _DEFAULT_MODEL,
-                         gateway: LLMGateway | None = None) -> str:
+                         gateway: LLMGateway | None = None,
+                         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> str:
     """연쇄 영향 → 고객사 회신 초안."""
-    return _draft(_CUSTOMER_SYSTEM_PROMPT, impact, model=model, gateway=gateway)
+    return _draft(_CUSTOMER_SYSTEM_PROMPT, impact, model=model, gateway=gateway,
+                  stage='customer_reply', timeout_seconds=timeout_seconds)
 
 
 __all__ = [

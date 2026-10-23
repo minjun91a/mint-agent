@@ -87,7 +87,7 @@ PowerShell에서 위 가상환경을 만든 뒤 실행합니다.
 ```powershell
 ./.venv/Scripts/python.exe -m pip install google-generativeai
 $env:GEMINI_API_KEY = Read-Host "Gemini API 키"
-./.venv/Scripts/python.exe run_manufacturing.py --out-dir output/manufacturing
+./.venv/Scripts/python.exe run_manufacturing.py --out-dir output/manufacturing --timeout-seconds 30
 Remove-Item Env:GEMINI_API_KEY
 ```
 
@@ -97,6 +97,12 @@ Remove-Item Env:GEMINI_API_KEY
 
 키가 없으면 초안 3종이 `draft_missing`으로 거절되고 파일은 생성되지 않습니다.
 이 정책상 거절도 종료 코드는 0이므로, 성공 여부는 `확정 발행` 또는 `발행하지 않음` 출력으로 구분합니다.
+
+기본 Gemini 호출은 1회당 30초 제한이며 자동 재시도하지 않습니다.
+API 오류·타임아웃·빈 응답이 발생하면 이후 초안 생성을 중단하고,
+승인 요청이나 파일 저장 없이 종료 코드 3과 실패 단계·오류 분류를 출력합니다.
+전체 CLI의 시간 제한과 주입한 게이트웨이의 강제 중단을 보장하는 옵션은 아닙니다.
+정책과 재현 방법은 [API 실패·고정 평가 설명](docs/manufacturing-reliability-eval.md)에 있습니다.
 
 ## 아키텍처와 설계 판단
 
@@ -148,6 +154,10 @@ research의 인용 ID 검사도 인용 본문이 주장을 뒷받침한다는 �
   Python 3.12·3.13·3.14 작업이 성공했습니다. Python 3.13 로그에서 **730 passed**를 확인할 수 있습니다.
 - [제조 CLI 테스트](tests/test_run_manufacturing.py)는 가짜 게이트웨이로 승인→저장,
   사람 승인/반려, 키 없음→저장 없음 경로를 검증합니다.
+- [고정 합성 평가 42건](docs/eval-results/manufacturing-v1.md)은 실제 검증·발행 경계를 통과하며
+  기대 판정·오류 종류·단계 42/42 일치, 정상 오차단 0/10, 위험 초안 자동 발행 0/28을 기록했습니다.
+  오류 주입 4건도 발행하지 않습니다. 개발 29건·예약 13건은 블라인드 분할이 아니며,
+  실제 모델 정확도나 독립 검수 결과는 아닙니다.
 - 외부 API 호출은 테스트 대역으로 대체합니다. 실제 제공자의 응답 품질·지연·운영 안정성은
   이 CI 결과에 포함되지 않습니다.
 - 과거 비용표는 **2026-07-10 기준 단가**입니다. 문서의 약 18배 차이는 같은 토큰 수의 단가 비교이며,
@@ -157,6 +167,7 @@ research의 인용 ID 검사도 인용 본문이 주장을 뒷받침한다는 �
 
 ```powershell
 ./.venv/Scripts/python.exe -m pytest
+./.venv/Scripts/python.exe -m evals.manufacturing --output eval-result.json
 ```
 
 macOS/Linux에서는 `.venv/bin/python -m pytest`를 사용합니다.

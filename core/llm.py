@@ -29,6 +29,7 @@ Phase 2 연결점: 비용 라우팅(복잡도→모델 티어)과 관측성(토�
 from __future__ import annotations
 
 import logging
+import math
 import os
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -114,8 +115,14 @@ class GeminiGateway:
     테스트의 monkeypatch.delenv가 그대로 반영됨).
     """
 
-    def __init__(self, *, api_key: str | None = None) -> None:
+    def __init__(self, *, api_key: str | None = None,
+                 timeout_seconds: float | None = None) -> None:
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0
+        ):
+            raise ValueError('timeout_seconds must be a finite positive number')
         self._explicit_key = api_key
+        self._timeout_seconds = timeout_seconds
 
     @property
     def _key(self) -> str:
@@ -145,7 +152,10 @@ class GeminiGateway:
             system_instruction=system,
             generation_config=generation_config,
         )
-        resp = gm.generate_content(prompt)
+        # 옵션이 없으면 기존 어댑터 동작 유지. 제조 경로는 명시적 deadline과 재시도 없음.
+        options = ({'request_options': {'timeout': self._timeout_seconds, 'retry': None}}
+                   if self._timeout_seconds is not None else {})
+        resp = gm.generate_content(prompt, **options)
         text = (getattr(resp, "text", None) or _empty_fallback(json_mode)).strip()
         # Gemini usage_metadata: prompt_token_count / candidates_token_count
         usage = _usage_from(getattr(resp, "usage_metadata", None),
@@ -259,3 +269,4 @@ class ClaudeGateway:
         # Anthropic usage: input_tokens / output_tokens
         usage = _usage_from(getattr(resp, "usage", None), "input_tokens", "output_tokens")
         return Completion(text=(text or _empty_fallback(json_mode)).strip(), usage=usage)
+
