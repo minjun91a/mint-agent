@@ -40,3 +40,8 @@ jobs:
           python -m evals.manufacturing --split dev --output eval-dev.json
           python -m evals.manufacturing --split holdout --output eval-holdout.json
 
+      - name: Check measurement preparation without model calls
+        run: |
+          python -m evals.live_manufacturing --out-dir output/ci-plan
+          python -m evals.live_manufacturing --simulate --out-dir output/ci-simulation
+
